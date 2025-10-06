@@ -1,0 +1,273 @@
+#3 11 12 15 18 21 24
+
+import json
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from scipy import signal
+from sklearn.decomposition import FastICA
+
+# Open data files for reading
+with open("all_workloads_ic2.json", "r") as f:
+    workloads = json.load(f)
+
+with open("all_system_loads_ic2.json", "r") as f:
+    sysloads = json.load(f)
+
+# choose workload by index
+workload = workloads[24]
+tasks = workload["tasklist"]
+
+sys_entry = sysloads[24]
+node_list = sys_entry["node_list"]
+
+# ------------------ detect the two node names in workload ------------------
+node_names = []
+unique_node = set()
+for task in tasks: # in task list in workload file
+    for node in task["nodes"]: # in node list
+        n = node["node_name"] # Get node name
+        # Get the name of the nodes in the workload
+        # Since there are only two nodes, stop when have both
+        if n not in unique_node: 
+            unique_node.add(n)
+            node_names.append(n)
+        if len(node_names) == 2:
+            break
+    if len(node_names) == 2:
+        break
+
+# Break them
+node1_name, node2_name = node_names[0], node_names[1]
+
+# list of all start/end times for both nodes
+start_end_node1 = []
+start_end_node2 = []
+
+# Get start/end times for both nodes
+for task in tasks:
+    s = float(task["start_time"])
+    e = float(task["finish_time"])
+    for node in task["nodes"]:
+        n = node["node_name"]
+        if n == node1_name:
+            start_end_node1.extend([s, e])
+        elif n == node2_name:
+            start_end_node2.extend([s, e])
+
+# Sort them
+start_end_node1.sort()
+start_end_node2.sort()
+
+# deduplicate and sort times
+times1 = sorted(set(start_end_node1))
+times2 = sorted(set(start_end_node2))
+
+# events: +1 at start, -1 at end
+events_node1 = []
+events_node2 = []
+
+for task in tasks:
+    s = float(task["start_time"])
+    e = float(task["finish_time"])
+    for node in task["nodes"]:
+        n = node["node_name"]
+        if n == node1_name:
+            events_node1.append((s, +1)); events_node1.append((e, -1))
+        elif n == node2_name:
+            events_node2.append((s, +1)); events_node2.append((e, -1))
+'''
+ events_node1 = [
+  (10, +1),  # Job A starts
+  (20, -1),  # Job A ends
+  (15, +1),  # Job B starts
+  (25, -1),  # Job B ends
+  (20, +1),  # Job C starts
+  (30, -1)   # Job C ends]
+'''
+  
+# sort events; process END before START at the same time
+events_node1.sort(key=lambda x: (x[0], 0 if x[1] == -1 else 1))
+events_node2.sort(key=lambda x: (x[0], 0 if x[1] == -1 else 1))
+# Sort time first, then by type (-1 before +1), if happen at same time
+# Subtract first because if not
+# 10-20 20-30, 20s will have overlap
+
+# no. of job running at time
+counts_left1 = {}
+counts_left2 = {}
+
+active = 0; i = 0
+# times1 is all unique start/end times for node1
+for t in times1:
+    # process all events, happens at this same time t, and 
+    while i < len(events_node1) and events_node1[i][0] == t and events_node1[i][1] == -1:
+        active += events_node1[i][1]; i += 1
+    while i < len(events_node1) and events_node1[i][0] == t and events_node1[i][1] == +1:
+        active += events_node1[i][1]; i += 1
+    counts_left1[t] = active
+
+'''
+counts_left1 = {
+  10: 1,  # 1 job active after 10
+  15: 2,  # 2 jobs active after 15
+  20: 1,  # 1 job active after 20
+  25: 0   # 0 jobs active after 25
+}
+'''    
+
+active = 0; i = 0
+for t in times2:
+    while i < len(events_node2) and events_node2[i][0] == t and events_node2[i][1] == -1:
+        active += events_node2[i][1]; i += 1
+    while i < len(events_node2) and events_node2[i][0] == t and events_node2[i][1] == +1:
+        active += events_node2[i][1]; i += 1
+    counts_left2[t] = active
+
+# start-end-how_many_jobs
+intervals_node1 = [(times1[i], times1[i+1], counts_left1[times1[i]]) for i in range(len(times1)-1)]
+intervals_node2 = [(times2[i], times2[i+1], counts_left2[times2[i]]) for i in range(len(times2)-1)]
+
+# pull CPU util series per node
+def get_cpu_series_for_node(nm):
+    for nd in node_list:
+        if nd["node_name"] == nm:
+            arr = nd["metrics"]["cpu_util"]  # list of [timestamp, util]
+            t = np.array([float(x[0]) for x in arr])
+            y = np.array([float(x[1]) for x in arr])
+            return t, y
+    return np.array([]), np.array([])
+
+t1, y1 = get_cpu_series_for_node(node1_name)
+t2, y2 = get_cpu_series_for_node(node2_name)
+
+# FASTICA on intervals with overlap 2 or 3
+# y is array of time, y is array of utilization, time window, overlap count
+def run_interval_ica(t, y, tL, tR, k):
+    mask = (t >= tL) & (t <= tR) # pick cpu data in time between
+    seg = y[mask] # mask = [T, T, F, F...], select only when True (utilization in the time) y
+    if seg.size < (k + 5):  # need some minimum length to be meaningful
+        return None  # too short; skip
+    # center segment
+    seg_c = seg - np.mean(seg)
+
+    N = seg_c.size # Number of y-mean in the segment
+    M = N - k + 1
+    if M <= 5:
+        return None
+    else:
+        X_df = pd.DataFrame({f"lag_{i}": seg_c[i:i+M] for i in range(k)})
+        X = X_df.values    
+
+    #.  X = np.column_stack([seg_c[i:i+M] for i in range(k)])  # shape (M, k)
+
+        ica = FastICA(n_components=k, random_state=0, whiten='unit-variance', max_iter=1000)
+        S = ica.fit_transform(X)  # (M, k) separated components
+        # reconstruct summed signal (project components back to mixture space then to 1D proxy)
+        # A * S^T gives reconstructed mixtures; take the first mixture column as proxy and un-embed by simple alignment
+        A = ica.mixing_  # (k, k)
+
+        X_rec = (S @ A.T)  # (M, k), reconstruction of lagged mixtures
+        # Collapse lagged reconstruction back to a 1D series by averaging columns
+        recon = X_rec.mean(axis=1)  # length M
+        # pad to original segment length with simple edge alignment
+        recon_full = np.zeros_like(seg_c)
+        recon_full[:M] = recon
+        if M < seg_c.size:
+            recon_full[M:] = recon[-1]
+
+    # components back to 1D by same collapsing (each column of X_rec originated from a column in X)
+    # For interpretability, also collapse S components:
+        comps = []
+        for j in range(k):
+            # approximate each component’s contribution in mixture space via A[:, j] * S[:, j]
+            Xj = np.outer(S[:, j], A[:, j])  # (M, k)
+            comp1d = Xj.mean(axis=1)
+            comp_full = np.zeros_like(seg_c)
+            comp_full[:M] = comp1d
+            if M < seg_c.size:
+                comp_full[M:] = comp1d[-1]
+            comps.append(comp_full)
+
+    # error metrics
+        mse = float(np.mean((recon_full - seg_c)**2))
+        mae = float(np.mean(np.abs(recon_full - seg_c)))
+
+        return {
+            "interval": (tL, tR),
+            "k": int(k),
+            "cpu_segment_time": t[mask],
+            "cpu_segment": seg,
+            "components": comps,       # list length k, each np.array length len(seg)
+            "components_sum": np.sum(np.vstack(comps), axis=0),
+            "reconstruction": recon_full + np.mean(seg),  # add mean back
+            "mse_vs_cpu": mse,
+            "mae_vs_cpu": mae
+        }
+
+results_node1 = []
+results_node2 = []
+
+for (tL, tR, k) in intervals_node1:
+    if k in (2, 3):
+        r = run_interval_ica(t1, y1, tL, tR, k)
+        if r is not None:
+            results_node1.append(r)
+
+for (tL, tR, k) in intervals_node2:
+    if k in (2, 3):
+        r = run_interval_ica(t2, y2, tL, tR, k)
+        if r is not None:
+            results_node2.append(r)
+
+# After this:
+# - intervals_node1 / intervals_node2 hold (t_left, t_right, overlap_count)
+# - results_node1 / results_node2 are lists of dicts with:
+#   interval, k, cpu_segment_time, cpu_segment, components (k arrays), components_sum, reconstruction, mse_vs_cpu, mae_vs_cpuu
+# ------------------ Plot both nodes with overlaps and ICA ------------------
+fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True) # 2 rows, 1 column
+fig.suptitle("CPU Utilization and Overlapping Intervals per Node", fontsize=14)
+# single title for whole figure
+
+# ===== Node 1 =====
+ax = axes[0]
+ax.plot(t1, y1, color='black', linewidth=1.2, label=f'{node1_name} CPU Utilization')
+# CPU utilization line as black
+
+# overlap shading
+for (tL, tR, k) in intervals_node1:
+    if k in (2, 3):
+        color = 'red' if k == 2 else 'orange'
+        ax.axvspan(tL, tR, color=color, alpha=0.3)
+# orange for 3 overlaps, red for 2 overlaps for each node interval
+
+# ICA reconstructed sums (if available)
+for r in results_node1:
+    ax.plot(r["cpu_segment_time"], r["components_sum"] + np.mean(r["cpu_segment"]),
+            color='blue', linewidth=1, alpha=0.7)
+
+ax.set_ylabel('CPU Utilization')
+ax.set_title(f'Node: {node1_name}')
+ax.legend(loc='upper right')
+
+# ===== Node 2 =====
+ax = axes[1]
+ax.plot(t2, y2, color='black', linewidth=1.2, label=f'{node2_name} CPU Utilization')
+
+for (tL, tR, k) in intervals_node2:
+    if k in (2, 3):
+        color = 'red' if k == 2 else 'orange'
+        ax.axvspan(tL, tR, color=color, alpha=0.3)
+
+for r in results_node2:
+    ax.plot(r["cpu_segment_time"], r["components_sum"] + np.mean(r["cpu_segment"]),
+            color='blue', linewidth=1, alpha=0.7)
+
+ax.set_xlabel('Time')
+ax.set_ylabel('CPU Utilization')
+ax.set_title(f'Node: {node2_name}')
+ax.legend(loc='upper right')
+
+plt.tight_layout(rect=[0, 0, 1, 0.96])
+plt.show()
+plt.savefig("node_cpu_ica_overlaps24.png", dpi=300)
