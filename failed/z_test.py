@@ -208,5 +208,5 @@ ax.set_title(f'Node: {node2_name}')
 ax.legend(loc='upper right')
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])
-plt.savefig("node_cpu_ica_sources_t11.png", dpi=300)
+plt.savefig("t11.png", dpi=300)
 plt.show()
