@@ -177,21 +177,33 @@ def separate_utilization_per_workload(i): # i is index of the workload
     np.save(out_dir / f"per_node_task_contribs_{workload_name}_{i}.npy", per_node_task_contribs, allow_pickle=True)
     np.save(out_dir / f"per_node_timestamps_{workload_name}_{i}.npy", per_node_timestamps, allow_pickle=True)
     np.save(out_dir / f"per_node_residuals_{workload_name}{i}.npy", per_node_residuals, allow_pickle=True)
-
+    totalMSE = 0
+    totalMAPE = 0
+    count = 0
     print("Generating plots...")
     for node, ts in per_node_timestamps.items():
         contrib_sum = sum(per_node_task_contribs[node].values())
         residual = per_node_residuals[node]
         y_obs = contrib_sum + residual
+        for i in range(len(residual)):
+            totalMSE += residual[i]**2
+            if y_obs[i] == 0.0 or residual[i] < 0:
+                continue
+            totalMAPE += (abs(residual[i])/y_obs[i])*100
+            count += 1
+
+        
         plt.figure(figsize=(10, 3))
         plt.plot(ts, y_obs, label="Observed")
         plt.plot(ts, contrib_sum, label="Reconstructed")
-        #plt.plot(ts, residual, label="Residual")
+        plt.plot(ts, residual, label="Residual")
         plt.title(f"Node {node}")
         plt.legend()
         plt.tight_layout()
         plt.savefig(out_dir / f"plot_{node}_{workload_name}_{i}.png")
         plt.close()
+    MSE = totalMSE/count
+    MAPE = totalMAPE/count
 
     print(f"✅ Results saved under: {out_dir.resolve()}")
     
@@ -223,6 +235,7 @@ def separate_utilization_per_workload(i): # i is index of the workload
         plt.close()
 
     print(f"✅ Multi-task plots saved under: {multi_plot_dir.resolve()}")
+    return MSE, MAPE
 
 if __name__ == "__main__":
     system_file = Path("all_system_loads_ic2.json")
@@ -237,7 +250,12 @@ if __name__ == "__main__":
     print("Loading workload metadata...")
     with workload_file.open() as f:
         workloads_data = json.load(f)
-    
+    totalMSE = 0
+    totalMAPE = 0
     for index in range(len(system_data)):
-        separate_utilization_per_workload(index)
+        singleMSE, singleMAPE = separate_utilization_per_workload(index)
+        totalMSE += singleMSE
+        totalMAPE += singleMAPE
+    print(f"MSE = {totalMSE/len(system_data)}")
+    print(f"MAPE = {totalMAPE/len(system_data)}")
         
