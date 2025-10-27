@@ -89,7 +89,8 @@ def mean_then_blockwise_nnls(ts, y, tasks, block_size=30, l2=1e-2):
     y_aug=np.concatenate([y,np.zeros(A.shape[1])])
     res=lsq_linear(A_aug,y_aug,bounds=(0,np.inf)); x=res.x
     for k in contribs: contribs[k][:]=0
-    for c,(tid,_) in enumerate(ids): contribs[tid]+=A[:,c]*x[c]
+    for c,(tid,_) in enumerate(ids): 
+        contribs[tid]+=A[:,c]*x[c]
     return contribs
 
 # ---------- Load data ----------
@@ -131,6 +132,9 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
     } for t in workload_entry.get("tasklist", [])]
 
     # Run hybrid algorithm for each node
+    c = 0.0
+    total_MSE = 0.0
+    total_MAPE = 0.0
     contribs_all = {}
     for node, data in node_series.items():
         node_tasks = [t for t in tasks if node in t["nodes"]]
@@ -139,11 +143,24 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
             data["timestamps"], data["util"], node_tasks, BLOCK_SIZE, L2
         )
         recon = sum(contribs.values())
+        cpu_util = data["util"]
+        
+        for reconstructed, original in zip(recon, cpu_util):
+            total_MSE += (reconstructed - original) ** 2
+            if (reconstructed - original) < 0 or original == 0:
+                continue
+            total_MAPE += abs(reconstructed - original)/original*100
+            c += 1.0
+        
         
 
         plot_tasks(data["timestamps"],data["util"], contribs,plotdir / f"task_{node}.png")
         plot_node(data["timestamps"], data["util"], recon, plotdir / f"{node}.png")
         contribs_all[node] = contribs
+
+    MSE = total_MSE/c
+    MAPE = total_MAPE/c
+    print(f"MSE: {MSE}, MAPE: {MAPE}%")
 
     np.save(OUT_DIR / f"per_node_task_contribs_{safe}.npy",
             {"workload": wname, "contribs": contribs_all}, allow_pickle=True)
