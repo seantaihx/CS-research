@@ -45,7 +45,7 @@ def separate_utilization_per_workload(i): # i is index of the workload
     for node in entry.get("node_list", []):
         name = node.get("node_name")
         metrics = node.get("metrics", {})
-        cpu_list = metrics.get("cpu_util", [])
+        cpu_list = metrics.get("memory_util", [])
         if name not in node_series:
             node_series[name] = {"timestamps": [], "util": []}
         for ts_str, val_str in cpu_list:
@@ -129,7 +129,7 @@ def separate_utilization_per_workload(i): # i is index of the workload
         for i in range(40):
             progress = False
             active_sum = active.sum(axis=0) # number of true values on axis 0
-            print(active_sum, end = "\n\n")
+            #print(active_sum, end = "\n\n")
             for j in range(Ntasks):
                 if known[j]:
                     continue
@@ -252,8 +252,10 @@ if __name__ == "__main__":
         workloads_data = json.load(f)
     totalMSE = 0
     totalMAPE = 0
+    results = []
     for index in range(len(system_data)):
         singleMSE, singleMAPE = separate_utilization_per_workload(index)
+        print(f"Workload {index}: MSE={singleMSE}, MAPE={singleMAPE}%")
         totalMSE += singleMSE
         totalMAPE += singleMAPE
     print(f"MSE = {totalMSE/len(system_data)}")

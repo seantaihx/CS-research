@@ -133,8 +133,8 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
 
     # Run hybrid algorithm for each node
     c = 0.0
-    total_MSE = 0.0
-    total_MAPE = 0.0
+    single_MSE = 0.0
+    single_MAPE = 0.0
     contribs_all = {}
     for node, data in node_series.items():
         node_tasks = [t for t in tasks if node in t["nodes"]]
@@ -146,10 +146,10 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
         cpu_util = data["util"]
         
         for reconstructed, original in zip(recon, cpu_util):
-            total_MSE += (reconstructed - original) ** 2
+            single_MSE += (reconstructed - original) ** 2
             if (reconstructed - original) < 0 or original == 0:
                 continue
-            total_MAPE += abs(reconstructed - original)/original*100
+            single_MAPE += abs(reconstructed - original)/original*100
             c += 1.0
         
         
@@ -158,10 +158,10 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
         plot_node(data["timestamps"], data["util"], recon, plotdir / f"{node}.png")
         contribs_all[node] = contribs
 
-    MSE = total_MSE/c
-    MAPE = total_MAPE/c
-    print(f"MSE: {MSE}, MAPE: {MAPE}%")
-
     np.save(OUT_DIR / f"per_node_task_contribs_{safe}.npy",
             {"workload": wname, "contribs": contribs_all}, allow_pickle=True)
     print(f"Saved per_node_task_contribs_{safe}.npy")
+
+MSE = single_MSE/c
+MAPE = single_MAPE/c
+print(f"\n=== Overall Results ===\nMSE: {MSE}, MAPE: {MAPE}%")
