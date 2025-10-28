@@ -155,7 +155,9 @@ def separate_utilization_per_workload(i): # i is index of the workload
                     known[j] = True
                     progress = True
             if not progress:
+                #print("known",known[j])
                 break
+
 
         per_node_task_contribs[node_name] = {}
         for j, ti in enumerate(task_indices):
@@ -168,6 +170,9 @@ def separate_utilization_per_workload(i): # i is index of the workload
             })
 
         per_node_residuals[node_name] = residual
+
+    for i in range(len(known)):
+        print("known", known[j], tasks[j]["start"], tasks[j]["finish"])
 
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(out_dir / f"per_node_task_summary_{workload_name}_{i}.csv", index=False)
@@ -258,6 +263,6 @@ if __name__ == "__main__":
         print(f"Workload {index}: MSE={singleMSE}, MAPE={singleMAPE}%")
         totalMSE += singleMSE
         totalMAPE += singleMAPE
-    print(f"MSE = {totalMSE/len(system_data)}")
-    print(f"MAPE = {totalMAPE/len(system_data)}")
+    #print(f"MSE = {totalMSE/len(system_data)}")
+    #print(f"MAPE = {totalMAPE/len(system_data)}")
         

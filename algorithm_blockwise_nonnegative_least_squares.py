@@ -99,7 +99,8 @@ workloads_all = json.load(open(DATA_DIR/"all_workloads_ic2.json"))
 assert len(system_all) == len(workloads_all), "System/workload list lengths differ!"
 
 print(f"Loaded {len(system_all)} parallel workload+system pairs.")
-
+all_MSE = 0
+all_MAPE = 0
 # ---------- Loop over pairs ----------
 for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_all)):
     wname = workload_entry.get("workload_name") or workload_entry.get("name") or f"w{wi}"
@@ -147,10 +148,12 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
         
         for reconstructed, original in zip(recon, cpu_util):
             single_MSE += (reconstructed - original) ** 2
+            print(reconstructed, original)
             if (reconstructed - original) < 0 or original == 0:
                 continue
             single_MAPE += abs(reconstructed - original)/original*100
             c += 1.0
+            print("C", c)        
         
         
 
@@ -162,6 +165,11 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
             {"workload": wname, "contribs": contribs_all}, allow_pickle=True)
     print(f"Saved per_node_task_contribs_{safe}.npy")
 
-MSE = single_MSE/c
-MAPE = single_MAPE/c
-print(f"\n=== Overall Results ===\nMSE: {MSE}, MAPE: {MAPE}%")
+    MSE = single_MSE/c
+    MAPE = single_MAPE/c
+    all_MSE += MSE
+    all_MAPE += MAPE
+    
+all_MSE /= len(system_all)
+all_MAPE /= len(system_all)
+print(f"\n=== Overall Results ===\nMSE: {all_MSE}, MAPE: {all_MAPE}%")
