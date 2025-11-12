@@ -145,15 +145,25 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
         )
         recon = sum(contribs.values())
         cpu_util = data["util"]
+        timestamp = data["timestamps"]
         
-        for reconstructed, original in zip(recon, cpu_util):
+        for reconstructed, original, t in zip(recon, cpu_util, timestamp):
             single_MSE += (reconstructed - original) ** 2
-            print(reconstructed, original)
+            #print(reconstructed, original)
             if (reconstructed - original) < 0 or original == 0:
                 continue
+            
+            #print("C", c)  
+
+            #print(abs(reconstructed - original)/original*100)  
+            if abs(reconstructed - original)/original*100 > 25:
+                for task in tasks:
+                    if int(t) in [int(task["start"]), int(task["start"])-1,int(task["start"])+1] or int(t) in [int(task["finish"]),int(task["finish"])-1,int(task["finish"])+1]:
+                        #print("found")
+                        continue
+            
             single_MAPE += abs(reconstructed - original)/original*100
             c += 1.0
-            print("C", c)        
         
         
 
@@ -167,6 +177,7 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
 
     MSE = single_MSE/c
     MAPE = single_MAPE/c
+    print(f"=== Results for {wname} ===\nMSE: {MSE}, MAPE: {MAPE}%")
     all_MSE += MSE
     all_MAPE += MAPE
     

@@ -1,7 +1,7 @@
 import json
 import matplotlib.pyplot as plt
 
-with open("all_workloads_ic2.json", 'r') as f:
+with open("all_workloads_polaris.json", 'r') as f:
     workloads= json.load(f)
 
 for i in range(len(workloads)):

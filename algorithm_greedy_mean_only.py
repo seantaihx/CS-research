@@ -38,14 +38,14 @@ def to_float_ts(x):
 
 # === BUILD NODE UTILIZATION ===
 
-def separate_utilization_per_workload(i): # i is index of the workload
+def separate_utilization_per_workload(workload_i): # i is index of the workload
     node_series = {}
-    entry = system_data[i]
+    entry = system_data[workload_i]
     workload_name = entry["workload-name"]
     for node in entry.get("node_list", []):
         name = node.get("node_name")
         metrics = node.get("metrics", {})
-        cpu_list = metrics.get("memory_util", [])
+        cpu_list = metrics.get("cpu_util", [])
         if name not in node_series:
             node_series[name] = {"timestamps": [], "util": []}
         for ts_str, val_str in cpu_list:
@@ -71,7 +71,7 @@ def separate_utilization_per_workload(i): # i is index of the workload
         node_series[name]["util"] = vals
 
 # === BUILD TASK TABLE ===
-    workload_entry = workloads_data[i]
+    workload_entry = workloads_data[workload_i]
     tasklist = workload_entry.get("tasklist", [])
 
     tasks = []
@@ -126,7 +126,7 @@ def separate_utilization_per_workload(i): # i is index of the workload
         known = np.zeros(Ntasks, dtype=bool)
         mean_est = np.full(Ntasks, np.nan)
 
-        for i in range(40):
+        for iter in range(40):
             progress = False
             active_sum = active.sum(axis=0) # number of true values on axis 0
             #print(active_sum, end = "\n\n")
@@ -171,8 +171,8 @@ def separate_utilization_per_workload(i): # i is index of the workload
 
         per_node_residuals[node_name] = residual
 
-    for i in range(len(known)):
-        print("known", known[j], tasks[j]["start"], tasks[j]["finish"])
+    #for i in range(len(known)):
+        #print("known", known[j], tasks[j]["start"], tasks[j]["finish"])
 
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(out_dir / f"per_node_task_summary_{workload_name}_{i}.csv", index=False)
@@ -190,11 +190,11 @@ def separate_utilization_per_workload(i): # i is index of the workload
         contrib_sum = sum(per_node_task_contribs[node].values())
         residual = per_node_residuals[node]
         y_obs = contrib_sum + residual
-        for i in range(len(residual)):
-            totalMSE += residual[i]**2
-            if y_obs[i] == 0.0 or residual[i] < 0:
+        for i2 in range(len(residual)):
+            totalMSE += residual[i2]**2
+            if y_obs[i2] == 0.0 or residual[i2] < 0:
                 continue
-            totalMAPE += (abs(residual[i])/y_obs[i])*100
+            totalMAPE += (abs(residual[i2])/y_obs[i2])*100
             count += 1
 
         
@@ -205,7 +205,7 @@ def separate_utilization_per_workload(i): # i is index of the workload
         plt.title(f"Node {node}")
         plt.legend()
         plt.tight_layout()
-        plt.savefig(out_dir / f"plot_{node}_{workload_name}_{i}.png")
+        plt.savefig(out_dir / f"plot_workload{workload_i}_{node}.png")
         plt.close()
     MSE = totalMSE/count
     MAPE = totalMAPE/count
@@ -263,6 +263,6 @@ if __name__ == "__main__":
         print(f"Workload {index}: MSE={singleMSE}, MAPE={singleMAPE}%")
         totalMSE += singleMSE
         totalMAPE += singleMAPE
-    #print(f"MSE = {totalMSE/len(system_data)}")
-    #print(f"MAPE = {totalMAPE/len(system_data)}")
+    print(f"MSE = {totalMSE/len(system_data)}")
+    print(f"MAPE = {totalMAPE/len(system_data)}")
         

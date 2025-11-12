@@ -10,7 +10,7 @@ from scipy.optimize import lsq_linear
 DATA_DIR = Path("./")
 
 # choose ONE workload index to run
-i = 15  # <<< change this to the workload you want
+i = 2  # <<< change this to the workload you want
 
 BLOCK_SIZE = 30.0   # seconds per block
 L2 = 1e-2           # regularization weight
@@ -176,7 +176,7 @@ for node_name, data in node_series.items():
     ax = axes[1]
     ax.plot(ts, y, label="Observed", lw=1.2)
     ax.plot(ts, recon_greedy, label="Reconstructed", lw=1.0)
-    ax.plot(ts, residual_greedy, label="Residual", lw=1.0)
+    #ax.plot(ts, residual_greedy, label="Residual", lw=1.0)
     ax.set_title(f"Node {node_name} — Greedy")
     ax.set_ylabel("Util")
     ax.legend(loc="best")
