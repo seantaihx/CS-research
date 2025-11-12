@@ -9,7 +9,7 @@ from scipy.optimize import lsq_linear
 
 # ==================== Config ====================
 DATA_DIR = Path("./")
-OUT_DIR  = Path("./results_combined_timefix")
+OUT_DIR  = Path("./ic2_memory")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 BLOCK_SIZE = 30.0   # seconds per block (for NNLS)
@@ -151,7 +151,7 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
     node_max_time = 0.0
     for node in system_entry.get("node_list", []):
         name  = node.get("node_name")
-        pairs = node.get("metrics", {}).get("cpu_util", [])
+        pairs = node.get("metrics", {}).get("memory_util", [])
         if not pairs:
             continue
         t, v = zip(*pairs)

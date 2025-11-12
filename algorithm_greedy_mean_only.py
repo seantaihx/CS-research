@@ -45,7 +45,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
     for node in entry.get("node_list", []):
         name = node.get("node_name")
         metrics = node.get("metrics", {})
-        cpu_list = metrics.get("cpu_util", [])
+        cpu_list = metrics.get("memory_util", [])
         if name not in node_series:
             node_series[name] = {"timestamps": [], "util": []}
         for ts_str, val_str in cpu_list:
@@ -190,7 +190,16 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         contrib_sum = sum(per_node_task_contribs[node].values())
         residual = per_node_residuals[node]
         y_obs = contrib_sum + residual
+
+        start_finish = set()
+        for ti in node_to_tasks.get(node, []):
+            s = int(tasks[ti]["start"])
+            f = int(tasks[ti]["finish"])
+            start_finish.update([s-1, s, s+1, f-1, f, f+1])
+
         for i2 in range(len(residual)):
+            if int(ts[i2]) in start_finish:
+                continue
             totalMSE += residual[i2]**2
             if y_obs[i2] == 0.0 or residual[i2] < 0:
                 continue
@@ -205,17 +214,17 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.title(f"Node {node}")
         plt.legend()
         plt.tight_layout()
-        plt.savefig(out_dir / f"plot_workload{workload_i}_{node}.png")
+        #plt.savefig(out_dir / f"plot_workload{workload_i}_{node}.png")
         plt.close()
     MSE = totalMSE/count
     MAPE = totalMAPE/count
 
-    print(f"✅ Results saved under: {out_dir.resolve()}")
+    #print(f"✅ Results saved under: {out_dir.resolve()}")
     
     multi_plot_dir = out_dir / "plots_all_tasks"
     multi_plot_dir.mkdir(exist_ok=True)
 
-    print("Generating per-node all-task utilization plots...")
+    #print("Generating per-node all-task utilization plots...")
     for node, ts in per_node_timestamps.items():
         contribs = per_node_task_contribs[node]
         if not contribs:
@@ -239,7 +248,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.savefig(out_file)
         plt.close()
 
-    print(f"✅ Multi-task plots saved under: {multi_plot_dir.resolve()}")
+    #print(f"✅ Multi-task plots saved under: {multi_plot_dir.resolve()}")
     return MSE, MAPE
 
 if __name__ == "__main__":
@@ -248,11 +257,11 @@ if __name__ == "__main__":
     out_dir = Path("./results_greedy_mean")
     out_dir.mkdir(exist_ok=True)
 
-    print("Loading system utilization data...")
+    #print("Loading system utilization data...")
     with system_file.open() as f:
         system_data = json.load(f)
 
-    print("Loading workload metadata...")
+    #print("Loading workload metadata...")
     with workload_file.open() as f:
         workloads_data = json.load(f)
     totalMSE = 0

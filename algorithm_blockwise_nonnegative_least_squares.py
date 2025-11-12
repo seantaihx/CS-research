@@ -94,8 +94,8 @@ def mean_then_blockwise_nnls(ts, y, tasks, block_size=30, l2=1e-2):
     return contribs
 
 # ---------- Load data ----------
-system_all = json.load(open(DATA_DIR/"all_system_loads_ic2.json"))
-workloads_all = json.load(open(DATA_DIR/"all_workloads_ic2.json"))
+system_all = json.load(open(DATA_DIR/"all_system_loads_polaris.json"))
+workloads_all = json.load(open(DATA_DIR/"all_workloads_polaris.json"))
 assert len(system_all) == len(workloads_all), "System/workload list lengths differ!"
 
 print(f"Loaded {len(system_all)} parallel workload+system pairs.")
@@ -113,7 +113,7 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
     node_series = {}
     for node in system_entry.get("node_list", []):
         name = node.get("node_name")
-        pairs = node.get("metrics", {}).get("cpu_util", [])
+        pairs = node.get("metrics", {}).get("memory_util", [])
         if not pairs: continue
         t, v = zip(*pairs)
         ts = np.array(list(map(float, t)))
@@ -147,21 +147,55 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
         cpu_util = data["util"]
         timestamp = data["timestamps"]
         
+        a = 0
+        b = 0
         for reconstructed, original, t in zip(recon, cpu_util, timestamp):
-            single_MSE += (reconstructed - original) ** 2
+            
             #print(reconstructed, original)
             if (reconstructed - original) < 0 or original == 0:
                 continue
             
             #print("C", c)  
-
+            skip = False
             #print(abs(reconstructed - original)/original*100)  
+            for task in tasks:
+                if int(t) in [int(task["start"]), int(task["start"])-1,int(task["start"])+1] or int(t) in [int(task["finish"]),int(task["finish"])-1,int(task["finish"])+1]:
+                    #print("found")
+                    skip = True
+                    continue
+            if skip:
+                continue
+            '''
+            if (reconstructed - original)**2 > 25:
+                for task in tasks:
+                    if int(t) in [int(task["start"]), int(task["start"])-1,int(task["start"])+1] or int(t) in [int(task["finish"]),int(task["finish"])-1,int(task["finish"])+1]:
+                        #print("found")
+                        skip = True
+                        continue
+                if skip:
+                    continue
+
+            
+                    #else:
+                        #print(f"time: {t}, task id:{task['task_id']}, start:{task['start']}, finish:{task['finish']}")
+
             if abs(reconstructed - original)/original*100 > 25:
                 for task in tasks:
                     if int(t) in [int(task["start"]), int(task["start"])-1,int(task["start"])+1] or int(t) in [int(task["finish"]),int(task["finish"])-1,int(task["finish"])+1]:
                         #print("found")
+                        skip = True
+                        #b += 1
                         continue
+                if skip:
+                    continue
+            #print(abs(reconstructed - original)/original*100)
+            #a += 1
             
+
+                    #else:
+                        #print(f"time: {t}, task id:{task['task_id']}, start:{task['start']}, finish:{task['finish']}")
+            '''
+            single_MSE += (reconstructed - original) ** 2
             single_MAPE += abs(reconstructed - original)/original*100
             c += 1.0
         
@@ -180,7 +214,8 @@ for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_al
     print(f"=== Results for {wname} ===\nMSE: {MSE}, MAPE: {MAPE}%")
     all_MSE += MSE
     all_MAPE += MAPE
-    
+
 all_MSE /= len(system_all)
 all_MAPE /= len(system_all)
 print(f"\n=== Overall Results ===\nMSE: {all_MSE}, MAPE: {all_MAPE}%")
+#print(a, b)
