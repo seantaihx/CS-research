@@ -1,0 +1,39 @@
+FUNCTION BlockwiseNNLS(tasks, ts, y, block_size, l2):
+
+    Initialize A_columns as empty list
+    Initialize ids as empty list
+
+    FOR each task t in tasks:
+        start  = t.start
+        finish = t.finish
+        // Number of block segments within this task duration
+        nb = MAX(1, CEIL((finish - start) / block_size))
+
+        // Create block boundaries
+        edges = LINSPACE(start, finish, nb + 1)
+        FOR each block index b from 0 to nb-1:
+            // Mask: which timestamps fall inside this block?
+            mask = (ts >= edges[b]) AND (ts < edges[b+1])
+            Add mask (as float array) to A_columns
+            Add (task_id, block_index) to ids
+
+    IF A_columns is empty:
+        RETURN empty contribs
+
+    // Build matrix A
+    A = STACK_ROWS(A_columns).TRANSPOSE
+    // Add L2 regularization rows
+    A_aug = STACK_ROWS(A, sqrt(l2) * IDENTITY_MATRIX(num_columns))
+    y_aug = CONCATENATE(y, zeros(num_columns))
+    // Solve non-negative least squares
+    x = NNLS(A_aug, y_aug)
+
+    // Reset contributions for each task
+    FOR each task_id in contribs:
+        contribs[task_id] = ZERO_VECTOR
+
+    // Accumulate contributions
+    FOR each column index c with (task_id, block_id):
+        contribs[task_id] += A[:, c] * x[c]
+
+    RETURN contribs

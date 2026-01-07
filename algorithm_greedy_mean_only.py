@@ -38,6 +38,156 @@ def to_float_ts(x):
 
 # === BUILD NODE UTILIZATION ===
 
+
+def pertask_utilization_greedy():
+
+    system_all = json.load(open("all_system_loads_ic2.json", "r"))
+    workloads_all = json.load(open("all_workloads_ic2.json", "r"))
+    assert len(system_all) == len(workloads_all)
+
+    contribs_all = {}
+
+    for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_all)):
+        wname = workload_entry.get("workload_name", f"w{wi}")
+        #print(wname)
+
+        node_series = {}
+        for node in system_entry.get("node_list", []):
+            name = node.get("node_name")
+            #print(name)
+            pairs = node.get("metrics", {}).get("memory_util", [])
+            if (not name) or (not pairs):
+                continue
+
+            t, v = zip(*pairs)  # list of (timestamp, util)
+            ts = np.array(list(map(float, t)))
+            y = np.array(list(map(float, v)))
+
+            order = np.argsort(ts)
+            node_series[name] = {
+                "timestamps": ts[order],
+                "util": y[order],
+            }
+
+        if not node_series:
+            continue
+
+
+        tasks = []
+        for t in workload_entry.get("tasklist", []):
+            tid = t.get("task_id", t.get("id"))
+            if tid is None:
+                continue
+
+            start = float(t.get("start_time", t.get("submit_time", 0.0)))
+            finish = float(t.get("finish_time", start + 1e-6))
+
+
+            nodes = t.get("nodes", []) #get node field or empty list if missing
+            node_names = []
+            for n in nodes:
+                nn = n.get("node_name")
+                node_names.append(nn)
+                #print(nn)
+
+
+            tasks.append({
+                "task_id": tid,
+                "start": start,
+                "finish": finish,
+                "nodes": node_names,
+            })
+        if not tasks:
+            continue
+
+
+        node_to_tasks = {n: [] for n in node_series.keys()}
+        for i, t in enumerate(tasks):
+            for n in t["nodes"]:
+                if n in node_to_tasks:
+                    node_to_tasks[n].append(i)
+
+
+        for node, data in node_series.items():
+            task_indices = node_to_tasks.get(node, [])
+            if not task_indices:
+                continue
+
+            ts = data["timestamps"] #per node
+            y = data["util"]    #per node
+
+            T = len(ts)
+            Ntasks = len(task_indices)
+
+            # active mask per task-on-this-node
+            active = np.zeros((Ntasks, T), dtype=bool)
+            tids = []
+            for j, ti in enumerate(task_indices):
+                tinfo = tasks[ti]
+                tids.append(tinfo["task_id"])
+                active[j] = (ts >= tinfo["start"]) & (ts < tinfo["finish"])
+
+
+            residual = y.copy()
+            known = np.zeros(Ntasks, dtype=bool)
+            ests = np.zeros(Ntasks)
+            mean_est = np.full(Ntasks, np.nan)
+            contribs = np.zeros((Ntasks, T))
+
+            for iters in range(40):
+                best_j = None
+                best_mse = None
+                best_est = None
+
+                for j in range(Ntasks):
+                    if known[j]:
+                        continue
+                    mask_only = active[j]
+                    if not mask_only.any():
+                        mask_ok = active[j].copy()
+                        for k in range(Ntasks):
+                            if k == j or known[k]:
+                                continue
+                            mask_ok &= ~active[k]
+                        mask_candidate = mask_ok
+                    else:
+                        mask_candidate = mask_only
+
+                    if mask_candidate.any():
+                        est = float(np.mean(residual[mask_candidate]))
+                        est = max(0.0, est)
+                        mean_est[j] = est
+                        contribs[j] = active[j].astype(float) * est
+                        residual -= contribs[j]
+                        known[j] = True
+                        progress = True
+
+                    if not progress:
+                        break
+
+
+
+            active_contribs = []
+            for j in range(Ntasks):
+                util = active[j].astype(float) * mean_est[j]
+                mask = util > 0.0
+                if not np.any(mask):
+                    continue
+
+                active_contribs.append({
+                    "task_id": tids[j],
+                    "Node_name": node,
+                    "Util": list(zip(ts[mask].tolist(), util[mask].tolist())),
+                })
+
+            if active_contribs:
+                contribs_all[(wname, node)] = active_contribs
+                print(node)
+            #print(contribs_all)
+
+    return contribs_all
+ 
+
 def separate_utilization_per_workload(workload_i): # i is index of the workload
     node_series = {}
     entry = system_data[workload_i]
@@ -45,7 +195,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
     for node in entry.get("node_list", []):
         name = node.get("node_name")
         metrics = node.get("metrics", {})
-        cpu_list = metrics.get("memory_util", [])
+        cpu_list = metrics.get("cpu_util", [])
         if name not in node_series:
             node_series[name] = {"timestamps": [], "util": []}
         for ts_str, val_str in cpu_list:
@@ -102,7 +252,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
     per_node_residuals = {}
     summary_rows = []
 
-    print("Running iterative mean-based separation...")
+    #print("Running iterative mean-based separation...")
     #print(per_node_timestamps)
     for node_name, ts in per_node_timestamps.items():
         y = per_node_util[node_name].astype(float).copy() # time stamps
@@ -176,7 +326,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
 
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(out_dir / f"per_node_task_summary_{workload_name}_{i}.csv", index=False)
-    print("Separation complete.")
+    #print("Separation complete.")
 
     # === SAVE & PLOT ===
     np.save(out_dir / f"per_node_task_contribs_{workload_name}_{i}.npy", per_node_task_contribs, allow_pickle=True)
@@ -185,7 +335,8 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
     totalMSE = 0
     totalMAPE = 0
     count = 0
-    print("Generating plots...")
+    totalMAE = 0
+    #print("Generating plots...")
     for node, ts in per_node_timestamps.items():
         contrib_sum = sum(per_node_task_contribs[node].values())
         residual = per_node_residuals[node]
@@ -201,6 +352,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
             if int(ts[i2]) in start_finish:
                 continue
             totalMSE += residual[i2]**2
+            totalMAE += abs(residual[i2])
             if y_obs[i2] == 0.0 or residual[i2] < 0:
                 continue
             totalMAPE += (abs(residual[i2])/y_obs[i2])*100
@@ -210,7 +362,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.figure(figsize=(10, 3))
         plt.plot(ts, y_obs, label="Observed")
         plt.plot(ts, contrib_sum, label="Reconstructed")
-        plt.plot(ts, residual, label="Residual")
+        #plt.plot(ts, residual, label="Residual")
         plt.title(f"Node {node}")
         plt.legend()
         plt.tight_layout()
@@ -218,6 +370,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.close()
     MSE = totalMSE/count
     MAPE = totalMAPE/count
+    MAE = totalMAE/count
 
     #print(f"✅ Results saved under: {out_dir.resolve()}")
     
@@ -245,11 +398,11 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.legend(loc="upper right", ncol=2, fontsize=8)
         plt.tight_layout()
         out_file = multi_plot_dir / f"node_{node}_{workload_name}_all_tasks.png"
-        plt.savefig(out_file)
+        #plt.savefig(out_file)
         plt.close()
 
     #print(f"✅ Multi-task plots saved under: {multi_plot_dir.resolve()}")
-    return MSE, MAPE
+    return MSE, MAPE, MAE
 
 if __name__ == "__main__":
     system_file = Path("all_system_loads_ic2.json")
@@ -266,12 +419,17 @@ if __name__ == "__main__":
         workloads_data = json.load(f)
     totalMSE = 0
     totalMAPE = 0
+    totalMAE = 0
     results = []
     for index in range(len(system_data)):
-        singleMSE, singleMAPE = separate_utilization_per_workload(index)
-        print(f"Workload {index}: MSE={singleMSE}, MAPE={singleMAPE}%")
+        singleMSE, singleMAPE, singleMAE = separate_utilization_per_workload(index)
+        print(f"Workload {index}: MSE={singleMSE}, MAE={singleMAE}%")
+        #print(f"MAE: {singleMAE}")
         totalMSE += singleMSE
         totalMAPE += singleMAPE
+        totalMAE += singleMAE
     print(f"MSE = {totalMSE/len(system_data)}")
     print(f"MAPE = {totalMAPE/len(system_data)}")
+    print(f"MAE = {totalMAE/len(system_data)}")
         
+#pertask_utilization_greedy_mean()

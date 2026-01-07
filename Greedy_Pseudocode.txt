@@ -1,0 +1,39 @@
+FOR iter from 1 to 40:
+
+    progress = FALSE
+
+    // Count how many tasks are active at each timestamp
+    active_sum = COLUMN_SUM(active)
+
+    FOR each task j:
+
+        IF task j is already known:
+            CONTINUE
+
+        // Mask where only this task is active
+        mask_only = active[j] AND (active_sum == 1)
+
+        IF mask_only has no TRUE elements:
+            // Try locations where j is active and others are inactive
+            mask_candidate = COPY(active[j])
+            FOR each other task k:
+                IF k == j OR task k is known:
+                    CONTINUE
+                mask_candidate = mask_candidate AND NOT active[k]
+        ELSE:
+            mask_candidate = mask_only
+
+        // If we found timestamps where j is identifiable
+        IF mask_candidate has any TRUE:
+            est = MEAN(residual over mask_candidate)
+            est = MAX(est, 0)       // enforce non-negative
+            mean_est[j] = est
+
+            contribs[j] = active[j] * est
+            residual = residual - contribs[j]
+
+            mark task j as known
+            progress = TRUE
+
+    IF progress == FALSE:
+        BREAK   // No more tasks updated ⇒ stop early
