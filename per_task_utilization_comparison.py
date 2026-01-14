@@ -18,7 +18,7 @@ USE_RELATIVE_TIME = True
 cmap = plt.colormaps.get_cmap("tab20")
 
 common_keys = sorted(set(contribs_nnls) & set(contribs_greedy))
-print("COMMON (workload,node) count:", len(common_keys))
+#print("COMMON (workload,node) count:", len(common_keys))
 
 
 metrics_rows = []
