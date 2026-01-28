@@ -55,7 +55,7 @@ def pertask_utilization_greedy():
         for node in system_entry.get("node_list", []):
             name = node.get("node_name")
             #print(name)
-            pairs = node.get("metrics", {}).get("memory_util", [])
+            pairs = node.get("metrics", {}).get("cpu_util", [])
             if (not name) or (not pairs):
                 continue
 
@@ -182,13 +182,112 @@ def pertask_utilization_greedy():
 
             if active_contribs:
                 contribs_all[(wname, node)] = active_contribs
-                print(node)
+                #print(node)
             #print(contribs_all)
 
     return contribs_all
  
+import numpy as np
 
-def separate_utilization_per_workload(workload_i): # i is index of the workload
+def greedy_mean_separation(ts, y, tasks, *, max_iters=40, eps=1e-12):
+    """
+    Greedy mean separation (your PDF logic, but cleaned up).
+
+    Inputs
+    - ts: 1D array of timestamps (sorted or unsorted)
+    - y:  1D array of cpu util (same length as ts)
+    - tasks: list of dicts, each must have:
+        {"task_id": ..., "start": ..., "finish": ...}
+
+    Returns
+    - contribs_by_tid: dict {task_id: contrib_vector}
+    - recon: 1D array, sum of all contribs
+    - residual: 1D array, y - recon
+    - mean_est_by_tid: dict {task_id: estimated_mean (float or None)}
+    """
+
+    ts = np.asarray(ts, dtype=float)
+    y = np.asarray(y, dtype=float)
+    assert ts.shape == y.shape and ts.ndim == 1
+
+    # Ensure sorted by time (important for consistent masks/plots)
+    order = np.argsort(ts)
+    ts = ts[order]
+    y = y[order]
+
+    T = len(ts)
+    N = len(tasks)
+
+    # Build active masks: active[j, t] = True if task j active at timestamp t
+    active = np.zeros((N, T), dtype=bool)
+    task_ids = []
+    for j, tsk in enumerate(tasks):
+        tid = tsk["task_id"]
+        start = float(tsk["start"])
+        finish = float(tsk["finish"])
+        task_ids.append(tid)
+
+        # half-open interval [start, finish)
+        active[j] = (ts >= start) & (ts < finish)
+
+    residual = y.copy()
+    known = np.zeros(N, dtype=bool)
+    mean_est = np.full(N, np.nan)
+    contribs = np.zeros((N, T), dtype=float)
+
+    for _ in range(max_iters):
+        progress = False
+        active_sum = active.sum(axis=0)  # how many tasks active at each timestamp
+
+        for j in range(N):
+            if known[j]:
+                continue
+
+            # 1) best case: timestamps where ONLY this task is active
+            mask_only = active[j] & (active_sum == 1)
+
+            if mask_only.any():
+                mask_candidate = mask_only
+            else:
+                # 2) fallback: task j active, and no OTHER UNKNOWN tasks active
+                mask_ok = active[j].copy()
+                for k in range(N):
+                    if k == j or known[k]:
+                        continue
+                    mask_ok &= ~active[k]
+                mask_candidate = mask_ok
+
+            if mask_candidate.any():
+                est = np.nanmean(residual[mask_candidate])
+                if not np.isfinite(est):
+                    continue
+
+                est = max(0.0, float(est))  # keep non-negative like your code
+                mean_est[j] = est
+
+                cj = active[j].astype(float) * est
+                contribs[j] = cj
+                residual = residual - cj
+
+                known[j] = True
+                progress = True
+
+        if not progress:
+            break
+
+    # Pack results
+    contribs_by_tid = {task_ids[j]: contribs[j] for j in range(N)}
+    recon = contribs.sum(axis=0)
+    residual = y - recon  # safer than accumulated subtraction drift
+
+    mean_est_by_tid = {
+        task_ids[j]: (None if np.isnan(mean_est[j]) else float(mean_est[j]))
+        for j in range(N)
+    }
+
+    return recon
+
+def separate_utilization_per_workload(workload_i, system_data, workloads_data): # i is index of the workload
     node_series = {}
     entry = system_data[workload_i]
     workload_name = entry["workload-name"]
@@ -323,7 +422,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
 
     #for i in range(len(known)):
         #print("known", known[j], tasks[j]["start"], tasks[j]["finish"])
-
+    '''
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(out_dir / f"per_node_task_summary_{workload_name}_{i}.csv", index=False)
     #print("Separation complete.")
@@ -332,6 +431,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
     np.save(out_dir / f"per_node_task_contribs_{workload_name}_{i}.npy", per_node_task_contribs, allow_pickle=True)
     np.save(out_dir / f"per_node_timestamps_{workload_name}_{i}.npy", per_node_timestamps, allow_pickle=True)
     np.save(out_dir / f"per_node_residuals_{workload_name}{i}.npy", per_node_residuals, allow_pickle=True)
+    '''
     totalMSE = 0
     totalMAPE = 0
     count = 0
@@ -358,7 +458,7 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
             totalMAPE += (abs(residual[i2])/y_obs[i2])*100
             count += 1
 
-        
+        '''
         plt.figure(figsize=(10, 3))
         plt.plot(ts, y_obs, label="Observed")
         plt.plot(ts, contrib_sum, label="Reconstructed")
@@ -368,16 +468,18 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.tight_layout()
         #plt.savefig(out_dir / f"plot_workload{workload_i}_{node}.png")
         plt.close()
+        '''
     MSE = totalMSE/count
     MAPE = totalMAPE/count
     MAE = totalMAE/count
 
     #print(f"✅ Results saved under: {out_dir.resolve()}")
     
-    multi_plot_dir = out_dir / "plots_all_tasks"
-    multi_plot_dir.mkdir(exist_ok=True)
+    #multi_plot_dir = out_dir / "plots_all_tasks"
+    #multi_plot_dir.mkdir(exist_ok=True)
 
     #print("Generating per-node all-task utilization plots...")
+    '''
     for node, ts in per_node_timestamps.items():
         contribs = per_node_task_contribs[node]
         if not contribs:
@@ -402,34 +504,33 @@ def separate_utilization_per_workload(workload_i): # i is index of the workload
         plt.close()
 
     #print(f"✅ Multi-task plots saved under: {multi_plot_dir.resolve()}")
+    '''
     return MSE, MAPE, MAE
 
-if __name__ == "__main__":
-    system_file = Path("all_system_loads_ic2.json")
-    workload_file = Path("all_workloads_ic2.json")
-    out_dir = Path("./results_greedy_mean")
-    out_dir.mkdir(exist_ok=True)
+def gm_main(workload_data, system_data):
+    #system_file = Path(system)
+    #workload_file = Path(workload)
+    #out_dir = Path("./results_greedy_mean")
+    #out_dir.mkdir(exist_ok=True)
 
-    #print("Loading system utilization data...")
-    with system_file.open() as f:
-        system_data = json.load(f)
 
-    #print("Loading workload metadata...")
-    with workload_file.open() as f:
-        workloads_data = json.load(f)
     totalMSE = 0
     totalMAPE = 0
     totalMAE = 0
     results = []
+    MAE_list = []
     for index in range(len(system_data)):
-        singleMSE, singleMAPE, singleMAE = separate_utilization_per_workload(index)
-        print(f"Workload {index}: MSE={singleMSE}, MAE={singleMAE}%")
+        singleMSE, singleMAPE, singleMAE = separate_utilization_per_workload(index, system_data, workload_data)
+        #print(f"Workload {index}: MSE={singleMSE}, MAE={singleMAE}%")
         #print(f"MAE: {singleMAE}")
         totalMSE += singleMSE
         totalMAPE += singleMAPE
         totalMAE += singleMAE
-    print(f"MSE = {totalMSE/len(system_data)}")
-    print(f"MAPE = {totalMAPE/len(system_data)}")
-    print(f"MAE = {totalMAE/len(system_data)}")
+        MAE_list.append(float(singleMAE))
+        
+    #print(f"MSE = {totalMSE/len(system_data)}")
+    #print(f"MAPE = {totalMAPE/len(system_data)}")
+    #print(f"MAE = {totalMAE/len(system_data)}")
+    return MAE_list
         
 #pertask_utilization_greedy_mean()

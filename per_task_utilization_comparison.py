@@ -27,16 +27,19 @@ metrics_rows = []
 big_counter = 0
 all_mse = 0.0
 all_mae = 0.0
+mae_workload = {}
+mae_counter = {}
 for (wname, node) in common_keys:
     nnls_list = contribs_nnls[(wname, node)]
     greedy_list = contribs_greedy[(wname, node)]
+    
 
     # build tid -> {t:u}
     nnls_map = {int(r["task_id"]): {float(t): float(u) for (t, u) in r["Util"]} for r in nnls_list}
     greedy_map = {int(r["task_id"]): {float(t): float(u) for (t, u) in r["Util"]} for r in greedy_list}
 
     # all tasks active in either algorithm
-    all_tids = sorted(set(nnls_map) | set(greedy_map))
+    all_tids = sorted(set(nnls_map) | set(greedy_map)) # greedy alg may not find a utilization for some tasks!!! CHECK!!!!
     if not all_tids:
         continue
 
@@ -48,8 +51,9 @@ for (wname, node) in common_keys:
     plotted = 0
     counter = 0
     for i, tid in enumerate(all_tids):
-        a = nnls_map.get(tid, {})
+        a = nnls_map.get(tid, {}) #CHANGE a and b names to nnls and greedy algorithm relationship
         b = greedy_map.get(tid, {})
+
 
         # aligned union timestamps
         xs = np.array(sorted(set(a) | set(b)), dtype=float)
@@ -83,35 +87,44 @@ for (wname, node) in common_keys:
         mean_avg = float(np.mean((y_a + y_b) / 2.0))
         mse = float(np.mean((y_a - y_b) ** 2))
         mae = float(np.mean(np.abs(y_a - y_b)))
-
-        if mean_avg > 0:
+        '''
+        if mean_avg > 0: #Not needed
             norm_mse = mse / mean_avg
             norm_mae = mae / mean_avg
         else:
             norm_mse = np.nan
             norm_mae = np.nan
-
-        total_mse += norm_mse
-        total_mae += norm_mae
+        '''
+        total_mse += mse
+        total_mae += mae
+        counter += 1
+        
 
         #print("mse:", norm_mse)
         #print("mae:", norm_mae)
-
+        '''
         metrics_rows.append([
             wname, node, tid, int(xs.size),
             mean_avg, mse, mae, norm_mse, norm_mae
-        ])
-        counter += 1
+        ])'''
     big_counter += 1
-    print("total mse:", total_mse/counter)
-    print("total mae:", total_mae/counter)
-    print("counter:", counter)
+    #print("total mse:", total_mse/counter)
+    #print("total mae:", total_mae/counter)
+    #print("counter:", counter)
+    if counter > 0:
+        avg_mae_node = total_mae/counter
+        if wname not in mae_workload:
+            mae_workload[wname] = 0.0
+            mae_counter[wname] = 0
+
+        mae_workload[wname] += avg_mae_node
+        mae_counter[wname] += 1
     
     if plotted == 0:
         plt.close(fig)
         continue
-    all_mse += total_mse/counter
-    all_mae += total_mae/counter
+    all_mse += total_mse/big_counter
+    all_mae += total_mae/big_counter
     ax.set_title(f"{wname} | {node} | {plotted} active tasks (NNLS solid vs Greedy dashed)")
     ax.set_xlabel("timestamp (relative)" if USE_RELATIVE_TIME else "timestamp")
     ax.set_ylabel("utilization")
@@ -140,13 +153,31 @@ for (wname, node) in common_keys:
         title_fontsize=9
     )
 
-    safe_w = "".join(c if c.isalnum() else "_" for c in str(wname))
-    safe_n = "".join(c if c.isalnum() else "_" for c in str(node))
-    out_path = os.path.join(OUT_DIR, f"{safe_w}_{safe_n}_compare.png")
+    #safe_w = "".join(c if c.isalnum() else "_" for c in str(wname))
+    #safe_n = "".join(c if c.isalnum() else "_" for c in str(node))
+    out_path = os.path.join(OUT_DIR, f"compare.png")
 
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 print("Plots saved to:", OUT_DIR)
-print("Overall avg mse:", all_mse/big_counter)
-print("Overall avg mae:", all_mae/big_counter)
+#print("Overall avg mse:", all_mse/big_counter)
+#print("Overall avg mae:", all_mae/big_counter)
+
+min_w = None
+max_w = None
+min_val = None
+max_val = None
+for wname in mae_workload:
+    avg_mae = mae_workload[wname]/mae_counter[wname]
+    
+    #print(f"Workload: {wname} | Avg MAE: {avg_mae}")
+    if (min_val is None) or (avg_mae < min_val):
+        min_val = avg_mae
+        min_w = wname
+    if (max_val is None) or (avg_mae > max_val):
+        max_val = avg_mae
+        max_w = wname
+
+#print("Workload min:", min_w, "with avg MAE:", min_val)
+#print("Workload max:", max_w, "with avg MAE:", max_val) #function return max and min id to call from other file

@@ -105,7 +105,7 @@ def pertask_utilization_NNLS():
         for node in system_entry.get("node_list", []):
             name = node.get("node_name") #get node name
             #print(name)
-            pairs = node.get("metrics", {}).get("memory_util", []) #get list of (timestamp, util) tuples
+            pairs = node.get("metrics", {}).get("cpu_util", []) #get list of (timestamp, util) tuples
             if not pairs: continue #skip if no data
             t, v = zip(*pairs) #unpack timestamps and utilizations
             ts = np.array(list(map(float, t))) #convert timestamps to float numpy array
@@ -170,17 +170,17 @@ def pertask_utilization_NNLS():
 
 
 
-def main():
+def nnls_main(workloads_all, system_all):
     # ---------- Load data ----------
-    system_all = json.load(open(DATA_DIR/"all_system_loads_ic2.json"))
-    workloads_all = json.load(open(DATA_DIR/"all_workloads_ic2.json"))
+    #system_all = json.load(open(DATA_DIR/system_file))
+    #workloads_all = json.load(open(DATA_DIR/workload_file))
     assert len(system_all) == len(workloads_all), "System/workload list lengths differ!"
 
     print(f"Loaded {len(system_all)} parallel workload+system pairs.")
     all_MSE = 0
     all_MAPE = 0
     all_MAE = 0
-
+    MAE_list = []
     # ---------- Loop over pairs ----------
     for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_all)):
         wname = workload_entry.get("workload_name") or workload_entry.get("name") or f"w{wi}"
@@ -193,7 +193,7 @@ def main():
         node_series = {}
         for node in system_entry.get("node_list", []):
             name = node.get("node_name")
-            pairs = node.get("metrics", {}).get("cpu_util", [])
+            pairs = node.get("metrics", {}).get("memory_util", [])
             if not pairs: continue
             t, v = zip(*pairs)
             ts = np.array(list(map(float, t)))
@@ -286,8 +286,8 @@ def main():
         
         
 
-            plot_tasks(data["timestamps"],data["util"], contribs,plotdir / f"task_{node}.png")
-            plot_node(data["timestamps"], data["util"], recon, plotdir / f"{node}.png")
+            #plot_tasks(data["timestamps"],data["util"], contribs,plotdir / f"task_{node}.png")
+            #plot_node(data["timestamps"], data["util"], recon, plotdir / f"{node}.png")
             contribs_all[node] = contribs
 
         np.save(OUT_DIR / f"per_node_task_contribs_{safe}.npy",
@@ -297,18 +297,22 @@ def main():
         MSE = single_MSE/c
         MAPE = single_MAPE/c
         MAE = single_MAE/c
-        print(f"MSE: {MSE}, MAPE: {MAPE}, MAE: {MAE}")
+        #print(f"MSE: {MSE}, MAPE: {MAPE}, MAE: {MAE}")
         #print(f"MAE: {MAE}")
         all_MSE += MSE
         all_MAPE += MAPE
         all_MAE += MAE
+        MAE_list.append(float(MAE))
 
     all_MSE /= len(system_all)
     all_MAPE /= len(system_all)
     all_MAE /= len(system_all)
-    print(f"\n=== Overall Results ===\nMSE: {all_MSE}, MAPE: {all_MAPE}, MAE: {all_MAE}")
+    #print(f"\n=== Overall Results ===\nMSE: {all_MSE}, MAPE: {all_MAPE}, MAE: {all_MAE}")
     #print(f"\n=== Overall Results ===\nMAE: {all_MAE}")
     #print(a, b)
-
+    #print("MAE list:", MAE_list)
+    #print(len(MAE_list))
+    return MAE_list
 
 #pertask_utilization_NNLS()
+#main()
