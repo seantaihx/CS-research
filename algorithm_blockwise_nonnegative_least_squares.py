@@ -170,7 +170,7 @@ def pertask_utilization_NNLS():
 
 
 
-def nnls_main(workloads_all, system_all):
+def nnls_main(workloads_all, system_all, utilization):
     # ---------- Load data ----------
     #system_all = json.load(open(DATA_DIR/system_file))
     #workloads_all = json.load(open(DATA_DIR/workload_file))
@@ -193,7 +193,7 @@ def nnls_main(workloads_all, system_all):
         node_series = {}
         for node in system_entry.get("node_list", []):
             name = node.get("node_name")
-            pairs = node.get("metrics", {}).get("memory_util", [])
+            pairs = node.get("metrics", {}).get(f"{utilization}_util", [])
             if not pairs: continue
             t, v = zip(*pairs)
             ts = np.array(list(map(float, t)))
@@ -228,12 +228,12 @@ def nnls_main(workloads_all, system_all):
             recon = sum(contribs.values())
             #sum all task contributions to get reconstructed node utilization
 
-            cpu_util = data["util"]
+            utilization_data = data["util"]
             timestamp = data["timestamps"]
 
             a = 0
             b = 0
-            for reconstructed, original, t in zip(recon, cpu_util, timestamp):
+            for reconstructed, original, t in zip(recon, utilization_data, timestamp):
                 
                 #print(reconstructed, original)
                 if (reconstructed - original) < 0 or original == 0:

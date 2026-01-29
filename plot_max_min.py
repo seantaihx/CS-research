@@ -38,9 +38,9 @@ def task_durations_data(workloads, wid):
     #print(normalized_timestamps)
     return normalized_timestamps
 
-def max_min(workload_file, system_file):
-    nnls_mae_list = nnls_main(workload_file, system_file)
-    gm_mae_list = gm_main(workload_file, system_file)
+def max_min(workload_file, system_file, util):
+    nnls_mae_list = nnls_main(workload_file, system_file, util)
+    gm_mae_list = gm_main(workload_file, system_file, util)
     difference_list = []
     max_index = 0
     min_index = 0
@@ -58,10 +58,11 @@ def max_min(workload_file, system_file):
             min_value = difference_list[i]
         
 
+    
+    #print(nnls_mae_list)
+    #print()
+    #print(gm_mae_list)
     '''
-    print(nnls_mae_list)
-    print()
-    print(gm_mae_list)
     print()
     print(difference_list)
     print()
@@ -202,7 +203,7 @@ def plot_ic2(workload_file, system_file, wid, util, word):
     #workload_file = input("Enter workload file: ")
     #system_file = input("Enter system load file: ")
     #wid = 15
-    max_index, min_index = max_min(workload_file, system_file)
+    #max_index, min_index = max_min(workload_file, system_file, util)
     normalized_task_durations = task_durations_data(workload_file, wid)
     node_series_norm, recon_nnls_all, recon_gm_all = all_util_data(workload_file, system_file, wid, util)
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
@@ -272,11 +273,13 @@ if __name__ == "__main__":
             workloads = json.load(f1)
         with open(system_file, "r") as f2:
             system_loads = json.load(f2)
-        max_index, min_index = max_min(workloads, system_loads)
-        plot_ic2(workloads, system_loads, min_index, util = 'cpu', word = "min")
-        plot_ic2(workloads, system_loads, max_index, util = 'cpu', word = "max")
-        plot_ic2(workloads, system_loads, max_index, util = 'memory', word = "max")
-        plot_ic2(workloads, system_loads, min_index, util = 'memory', word = "min")
+        max_index_cpu, min_index_cpu = max_min(workloads, system_loads, "cpu")
+        max_index_mem, min_index_mem = max_min(workloads, system_loads, "memory")
+        
+        plot_ic2(workloads, system_loads, min_index_cpu, util = 'cpu', word = "min")
+        plot_ic2(workloads, system_loads, max_index_cpu, util = 'cpu', word = "max")
+        plot_ic2(workloads, system_loads, max_index_mem, util = 'memory', word = "max")
+        plot_ic2(workloads, system_loads, min_index_mem, util = 'memory', word = "min")
     elif prompt == "polaris":
         workload_file = input("Enter Polaris workload file: ")
         system_file = input("Enter Polaris system load file: ")
@@ -284,12 +287,14 @@ if __name__ == "__main__":
             workloads = json.load(f1)
         with open(system_file, "r") as f2:
             system_loads = json.load(f2)
-        max_index, min_index = max_min(workloads, system_loads)
+        max_index_cpu, min_index_cpu = max_min(workloads, system_loads, "cpu")
+        max_index_mem, min_index_mem = max_min(workloads, system_loads, "memory")
+
         num_nodes = int(input("Enter number of nodes to plot: "))
-        plot_polaris(workloads, system_loads, min_index, util = 'cpu', word = "min", num_nodes = num_nodes)
-        plot_polaris(workloads, system_loads, max_index, util = 'cpu', word = "max", num_nodes = num_nodes)
-        plot_polaris(workloads, system_loads, max_index, util = 'memory', word = "max", num_nodes = num_nodes)
-        plot_polaris(workloads, system_loads, min_index, util = 'memory', word = "min", num_nodes = num_nodes)
+        plot_polaris(workloads, system_loads, min_index_cpu, util = 'cpu', word = "min", num_nodes = num_nodes)
+        plot_polaris(workloads, system_loads, max_index_cpu, util = 'cpu', word = "max", num_nodes = num_nodes)
+        plot_polaris(workloads, system_loads, max_index_mem, util = 'memory', word = "max", num_nodes = num_nodes)
+        plot_polaris(workloads, system_loads, min_index_mem, util = 'memory', word = "min", num_nodes = num_nodes)
     elif prompt == "both":
         workload_file_ic2 = input("Enter IC2 workload file: ")
         system_file_ic2 = input("Enter IC2 system load file: ")
@@ -303,17 +308,19 @@ if __name__ == "__main__":
             workloads_polaris = json.load(f3)
         with open(system_file_polaris, "r") as f4:
             system_loads_polaris = json.load(f4)
-        max_index_ic2, min_index_ic2 = max_min(workloads_ic2, system_loads_ic2)
-        max_index_polaris, min_index_polaris = max_min(workloads_polaris, system_loads_polaris)
+        max_index_ic2_cpu, min_index_ic2_cpu = max_min(workloads_ic2, system_loads_ic2, "cpu")
+        max_index_ic2_mem, min_index_ic2_mem = max_min(workloads_ic2, system_loads_ic2, "memory")
+        max_index_polaris_cpu, min_index_polaris_cpu = max_min(workloads_polaris, system_loads_polaris, "cpu")
+        max_index_polaris_mem, min_index_polaris_mem = max_min(workloads_polaris, system_loads_polaris, "memory")
         num_nodes = int(input("Enter number of nodes to plot for Polaris: "))
-        plot_ic2(workloads_ic2, system_loads_ic2, min_index_ic2, util = 'cpu', word = "min")
-        plot_ic2(workloads_ic2, system_loads_ic2, max_index_ic2, util = 'cpu', word = "max")
-        plot_ic2(workloads_ic2, system_loads_ic2, max_index_ic2, util = 'memory', word = "max")
-        plot_ic2(workloads_ic2, system_loads_ic2, min_index_ic2, util = 'memory', word = "min")
-        plot_polaris(workloads_polaris, system_loads_polaris, min_index_polaris, util = 'cpu', word = "min", num_nodes = num_nodes)
-        plot_polaris(workloads_polaris, system_loads_polaris, max_index_polaris, util = 'cpu', word = "max", num_nodes = num_nodes)
-        plot_polaris(workloads_polaris, system_loads_polaris, max_index_polaris, util = 'memory', word = "max", num_nodes = num_nodes)
-        plot_polaris(workloads_polaris, system_loads_polaris, min_index_polaris, util = 'memory', word = "min", num_nodes = num_nodes)
-
+        plot_ic2(workloads_ic2, system_loads_ic2, min_index_ic2_cpu, util = 'cpu', word = "min")
+        plot_ic2(workloads_ic2, system_loads_ic2, max_index_ic2_cpu, util = 'cpu', word = "max")
+        plot_ic2(workloads_ic2, system_loads_ic2, max_index_ic2_mem, util = 'memory', word = "max")
+        plot_ic2(workloads_ic2, system_loads_ic2, min_index_ic2_mem, util = 'memory', word = "min")
+        plot_polaris(workloads_polaris, system_loads_polaris, min_index_polaris_cpu, util = 'cpu', word = "min", num_nodes = num_nodes)
+        plot_polaris(workloads_polaris, system_loads_polaris, max_index_polaris_cpu, util = 'cpu', word = "max", num_nodes = num_nodes)
+        plot_polaris(workloads_polaris, system_loads_polaris, max_index_polaris_mem, util = 'memory', word = "max", num_nodes = num_nodes)
+        plot_polaris(workloads_polaris, system_loads_polaris, min_index_polaris_mem, util = 'memory', word = "min", num_nodes = num_nodes)
+        
     
     

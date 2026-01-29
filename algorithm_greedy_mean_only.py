@@ -287,17 +287,17 @@ def greedy_mean_separation(ts, y, tasks, *, max_iters=40, eps=1e-12):
 
     return recon
 
-def separate_utilization_per_workload(workload_i, system_data, workloads_data): # i is index of the workload
+def separate_utilization_per_workload(workload_i, system_data, workloads_data, utilization): # i is index of the workload
     node_series = {}
     entry = system_data[workload_i]
     workload_name = entry["workload-name"]
     for node in entry.get("node_list", []):
         name = node.get("node_name")
         metrics = node.get("metrics", {})
-        cpu_list = metrics.get("cpu_util", [])
+        utilization_list = metrics.get(f"{utilization}_util", [])
         if name not in node_series:
             node_series[name] = {"timestamps": [], "util": []}
-        for ts_str, val_str in cpu_list:
+        for ts_str, val_str in utilization_list:
             ts = to_float_ts(ts_str)
             val = float(val_str) if val_str not in [None, ""] else np.nan
             node_series[name]["timestamps"].append(ts)
@@ -507,7 +507,7 @@ def separate_utilization_per_workload(workload_i, system_data, workloads_data): 
     '''
     return MSE, MAPE, MAE
 
-def gm_main(workload_data, system_data):
+def gm_main(workload_data, system_data, utilization):
     #system_file = Path(system)
     #workload_file = Path(workload)
     #out_dir = Path("./results_greedy_mean")
@@ -520,7 +520,7 @@ def gm_main(workload_data, system_data):
     results = []
     MAE_list = []
     for index in range(len(system_data)):
-        singleMSE, singleMAPE, singleMAE = separate_utilization_per_workload(index, system_data, workload_data)
+        singleMSE, singleMAPE, singleMAE = separate_utilization_per_workload(index, system_data, workload_data, utilization)
         #print(f"Workload {index}: MSE={singleMSE}, MAE={singleMAE}%")
         #print(f"MAE: {singleMAE}")
         totalMSE += singleMSE
