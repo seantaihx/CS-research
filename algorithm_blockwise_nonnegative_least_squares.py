@@ -219,6 +219,8 @@ def nnls_main(workloads_all, system_all, utilization):
         single_MAE = 0.0
         contribs_all = {}
         for node, data in node_series.items():
+            node_abs_sum = 0.0
+            t_count = 0
             node_tasks = [t for t in tasks if node in t["nodes"]]
             if not node_tasks: continue
             contribs = mean_then_blockwise_nnls(
@@ -282,13 +284,21 @@ def nnls_main(workloads_all, system_all, utilization):
                 single_MSE += (reconstructed - original) ** 2
                 single_MAPE += abs(reconstructed - original)/original*100
                 single_MAE += abs(reconstructed - original)
+                node_abs_sum += abs(reconstructed - original)
+                t_count += 1
                 c += 1.0
+                
         
         
 
             #plot_tasks(data["timestamps"],data["util"], contribs,plotdir / f"task_{node}.png")
             #plot_node(data["timestamps"], data["util"], recon, plotdir / f"{node}.png")
             contribs_all[node] = contribs
+            if t_count > 0:
+                #print(t_count)
+                MAE_list.append(float(node_abs_sum/t_count))
+            #else:
+                #print(wi)
 
         np.save(OUT_DIR / f"per_node_task_contribs_{safe}.npy",
                 {"workload": wname, "contribs": contribs_all}, allow_pickle=True)
@@ -302,7 +312,8 @@ def nnls_main(workloads_all, system_all, utilization):
         all_MSE += MSE
         all_MAPE += MAPE
         all_MAE += MAE
-        MAE_list.append(float(MAE))
+        #MAE_list.append(float(MAE))
+        
 
     all_MSE /= len(system_all)
     all_MAPE /= len(system_all)
@@ -311,7 +322,8 @@ def nnls_main(workloads_all, system_all, utilization):
     #print(f"\n=== Overall Results ===\nMAE: {all_MAE}")
     #print(a, b)
     #print("MAE list:", MAE_list)
-    #print(len(MAE_list))
+    
+    #print(f"NNLS_{utilization}: {len(MAE_list)}")
     return MAE_list
 
 #pertask_utilization_NNLS()
