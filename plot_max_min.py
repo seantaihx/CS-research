@@ -39,17 +39,17 @@ def task_durations_data(workloads, wid):
     return normalized_timestamps
 
 def max_min(workload_file, system_file, util):
-    nnls_mae_list = nnls_main(workload_file, system_file, util)
-    gm_mae_list = gm_main(workload_file, system_file, util)
+    nnls_workload_mae_list, nnls_node_mae_list = nnls_main(workload_file, system_file, util)
+    gm_workload_mae_list, gm_node_mae_list = gm_main(workload_file, system_file, util)
     difference_list = []
     max_index = 0
     min_index = 0
     max_value = 0.0
     min_value = 0.0
     difference = 0.0
-    for i in range(len(nnls_mae_list)):
+    for i in range(len(nnls_workload_mae_list)):
         
-        difference_list.append(abs(nnls_mae_list[i] - gm_mae_list[i]))
+        difference_list.append(abs(nnls_workload_mae_list[i] - gm_workload_mae_list[i]))
         if difference_list[i] > max_value or max_value == 0.0:
             max_index = i
             max_value = difference_list[i]
@@ -59,9 +59,9 @@ def max_min(workload_file, system_file, util):
         
 
     
-    #print(nnls_mae_list)
+    #print(nnls_workload_mae_list)
     #print()
-    #print(gm_mae_list)
+    #print(gm_workload_mae_list)
     '''
     print()
     print(difference_list)

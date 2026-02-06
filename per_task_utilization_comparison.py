@@ -24,7 +24,7 @@ common_keys = sorted(set(contribs_nnls) & set(contribs_greedy))
 metrics_rows = []
 # columns: wname,node,task_id,n_points,mean_avg,mse,mae,norm_mse,norm_mae
 # mean_avg = mean((a+b)/2)
-big_counter = 0
+workload_counter = 0
 all_mse = 0.0
 all_mae = 0.0
 mae_workload = {}
@@ -107,7 +107,7 @@ for (wname, node) in common_keys:
             wname, node, tid, int(xs.size),
             mean_avg, mse, mae, norm_mse, norm_mae
         ])'''
-    big_counter += 1
+    workload_counter += 1
     #print("total mse:", total_mse/counter)
     #print("total mae:", total_mae/counter)
     #print("counter:", counter)
@@ -163,21 +163,3 @@ for (wname, node) in common_keys:
 print("Plots saved to:", OUT_DIR)
 #print("Overall avg mse:", all_mse/big_counter)
 #print("Overall avg mae:", all_mae/big_counter)
-
-min_w = None
-max_w = None
-min_val = None
-max_val = None
-for wname in mae_workload:
-    avg_mae = mae_workload[wname]/mae_counter[wname]
-    
-    #print(f"Workload: {wname} | Avg MAE: {avg_mae}")
-    if (min_val is None) or (avg_mae < min_val):
-        min_val = avg_mae
-        min_w = wname
-    if (max_val is None) or (avg_mae > max_val):
-        max_val = avg_mae
-        max_w = wname
-
-#print("Workload min:", min_w, "with avg MAE:", min_val)
-#print("Workload max:", max_w, "with avg MAE:", max_val) #function return max and min id to call from other file

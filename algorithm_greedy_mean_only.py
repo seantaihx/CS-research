@@ -187,7 +187,6 @@ def pertask_utilization_greedy():
 
     return contribs_all
  
-import numpy as np
 
 def greedy_mean_separation(ts, y, tasks, *, max_iters=40, eps=1e-12):
     """
@@ -437,7 +436,7 @@ def separate_utilization_per_workload(workload_i, system_data, workloads_data, u
     count = 0
     totalMAE = 0
     #print("Generating plots...")
-    MAE_list = []
+    node_MAE_list = []
     for node, ts in per_node_timestamps.items():
         node_abs_sum = 0.0
         t_count = 0
@@ -464,7 +463,7 @@ def separate_utilization_per_workload(workload_i, system_data, workloads_data, u
             count += 1
         if t_count > 0:
             #print(t_count)
-            MAE_list.append(float(node_abs_sum/t_count))
+            node_MAE_list.append(float(node_abs_sum/t_count))
 
         '''
         plt.figure(figsize=(10, 3))
@@ -513,7 +512,7 @@ def separate_utilization_per_workload(workload_i, system_data, workloads_data, u
 
     #print(f"✅ Multi-task plots saved under: {multi_plot_dir.resolve()}")
     '''
-    return MSE, MAPE, MAE, MAE_list
+    return MSE, MAPE, MAE, node_MAE_list
 
 def gm_main(workload_data, system_data, utilization):
     #system_file = Path(system)
@@ -526,7 +525,8 @@ def gm_main(workload_data, system_data, utilization):
     totalMAPE = 0
     totalMAE = 0
     results = []
-    all_MAE_list = []
+    workload_MAE_list = []
+    node_MAE_list = []
     for index in range(len(system_data)):
         singleMSE, singleMAPE, singleMAE, MAE_list = separate_utilization_per_workload(index, system_data, workload_data, utilization)
         #print(f"Workload {index}: MSE={singleMSE}, MAE={singleMAE}%")
@@ -534,14 +534,14 @@ def gm_main(workload_data, system_data, utilization):
         totalMSE += singleMSE
         totalMAPE += singleMAPE
         totalMAE += singleMAE
-        all_MAE_list.extend(MAE_list)
-        #MAE_list.append(float(singleMAE))
+        node_MAE_list.extend(MAE_list)
+        workload_MAE_list.append(float(singleMAE))
 
     #print(f"GM_{utilization}: {len(all_MAE_list)}")
     
     #print(f"MSE = {totalMSE/len(system_data)}")
     #print(f"MAPE = {totalMAPE/len(system_data)}")
     #print(f"MAE = {totalMAE/len(system_data)}")
-    return all_MAE_list
+    return workload_MAE_list, node_MAE_list
 
 #pertask_utilization_greedy_mean()

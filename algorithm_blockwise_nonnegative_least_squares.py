@@ -181,6 +181,7 @@ def nnls_main(workloads_all, system_all, utilization):
     all_MAPE = 0
     all_MAE = 0
     MAE_list = []
+    node_MAE_list = []
     # ---------- Loop over pairs ----------
     for wi, (system_entry, workload_entry) in enumerate(zip(system_all, workloads_all)):
         wname = workload_entry.get("workload_name") or workload_entry.get("name") or f"w{wi}"
@@ -296,7 +297,7 @@ def nnls_main(workloads_all, system_all, utilization):
             contribs_all[node] = contribs
             if t_count > 0:
                 #print(t_count)
-                MAE_list.append(float(node_abs_sum/t_count))
+                node_MAE_list.append(float(node_abs_sum/t_count))
             #else:
                 #print(wi)
 
@@ -312,7 +313,7 @@ def nnls_main(workloads_all, system_all, utilization):
         all_MSE += MSE
         all_MAPE += MAPE
         all_MAE += MAE
-        #MAE_list.append(float(MAE))
+        MAE_list.append(float(MAE))
         
 
     all_MSE /= len(system_all)
@@ -324,7 +325,7 @@ def nnls_main(workloads_all, system_all, utilization):
     #print("MAE list:", MAE_list)
     
     #print(f"NNLS_{utilization}: {len(MAE_list)}")
-    return MAE_list
+    return MAE_list, node_MAE_list
 
 #pertask_utilization_NNLS()
 #main()
