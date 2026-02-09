@@ -39,10 +39,10 @@ def to_float_ts(x):
 # === BUILD NODE UTILIZATION ===
 
 
-def pertask_utilization_greedy():
+def pertask_utilization_greedy(system_all, workloads_all, utilization):
 
-    system_all = json.load(open("all_system_loads_ic2.json", "r"))
-    workloads_all = json.load(open("all_workloads_ic2.json", "r"))
+    #system_all = json.load(open("all_system_loads_ic2.json", "r"))
+    #workloads_all = json.load(open("all_workloads_ic2.json", "r"))
     assert len(system_all) == len(workloads_all)
 
     contribs_all = {}
@@ -55,7 +55,7 @@ def pertask_utilization_greedy():
         for node in system_entry.get("node_list", []):
             name = node.get("node_name")
             #print(name)
-            pairs = node.get("metrics", {}).get("cpu_util", [])
+            pairs = node.get("metrics", {}).get(f"{utilization}_util", [])
             if (not name) or (not pairs):
                 continue
 

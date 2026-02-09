@@ -88,10 +88,10 @@ def mean_then_blockwise_nnls(ts, y, tasks, block_size=30, l2=1e-2): #time, util,
     """
 
 
-def pertask_utilization_NNLS():
+def pertask_utilization_NNLS(system_all, workloads_all, utilization):
 
-    system_all = json.load(open(DATA_DIR/"all_system_loads_ic2.json"))
-    workloads_all = json.load(open(DATA_DIR/"all_workloads_ic2.json"))
+    #system_all = json.load(open(DATA_DIR/"all_system_loads_ic2.json"))
+    #workloads_all = json.load(open(DATA_DIR/"all_workloads_ic2.json"))
     assert len(system_all) == len(workloads_all)
 
     contribs_all = {} #initialize empty dictionary to hold all contributions
@@ -105,7 +105,7 @@ def pertask_utilization_NNLS():
         for node in system_entry.get("node_list", []):
             name = node.get("node_name") #get node name
             #print(name)
-            pairs = node.get("metrics", {}).get("cpu_util", []) #get list of (timestamp, util) tuples
+            pairs = node.get("metrics", {}).get(f"{utilization}_util", []) #get list of (timestamp, util) tuples
             if not pairs: continue #skip if no data
             t, v = zip(*pairs) #unpack timestamps and utilizations
             ts = np.array(list(map(float, t))) #convert timestamps to float numpy array
