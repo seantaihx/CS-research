@@ -3,21 +3,50 @@ from algorithm_greedy_mean_only import pertask_utilization_greedy
 import json
 import pandas as pd
 
+import json
+import pandas as pd
+
 def check(system_file, workloads_file, utilization, tid):
     contribs_nnls = pertask_utilization_NNLS(system_file, workloads_file, utilization)
-    first_wi = min(wi for (wi, _) in contribs_nnls.keys())
-
+    rows = []
     for (wi, node), task_list in contribs_nnls.items():
-        if wi != first_wi:
-            continue
-
+        if wi != "w0":
+            break
         for task in task_list:
             if task["task_id"] == tid:
                 utils = [u for _, u in task["Util"]]
                 print(f"workload={wi}, node={node}, tid={tid} utils:")
                 print(utils)
+
     
-def imbalance(system_file, workloads_file, utilization):
+def exclude_short_tasks(workloads_file):
+    """
+    contribs: dict {(wi, node): [task_dict, ...]}
+    Returns: set of (wi, node, tid) to exclude
+    """
+    short = {}
+
+    for wi in range(len(workloads_file)):
+        tasks = workloads_file[wi]["tasklist"]
+        for t in tasks:
+            tid = t["task_id"]
+            if tid is None:
+                continue
+            s = float(t["start_time"])
+            f = float(t["finish_time"])
+            if s is None or f is None:
+                continue
+            dur = f - s
+            if dur < 60:
+                print(f"Short task: workload={wi}, tid={tid}, dur={dur}")
+                if f"w{wi}" not in short:
+                    short[f"w{wi}"] = []
+                short[f"w{wi}"].append(tid)
+        #print(f"Workload {wi} has {len(short.get(wi, []))} short tasks.")
+    #print(short.values())
+    return short
+
+def _imbalance(system_file, workloads_file, utilization, exclude=False):
     contribs_nnls = pertask_utilization_NNLS(system_file, workloads_file, utilization)
     contribs_greedy = pertask_utilization_greedy(system_file, workloads_file, utilization)
     '''
@@ -35,16 +64,18 @@ def imbalance(system_file, workloads_file, utilization):
 
 
 
+    #print(f"exclude: {exclude}")
 
     ti_wi_tid_nnls= {}
     ti_wi_tid_gm = {}
     si_wi_tid_nnls = {}
     si_wi_tid_gm = {}
-
+    
     
     for (wi, node), task_list in contribs_nnls.items():
         #task_list = list of dict
-
+        #print(wi)
+        
         if wi not in ti_wi_tid_nnls:
             ti_wi_tid_nnls[wi] = {}
         if wi not in si_wi_tid_nnls:
@@ -52,6 +83,14 @@ def imbalance(system_file, workloads_file, utilization):
 
         for task in task_list: #single task dict
             tid = task["task_id"]
+            #print(f"tid={tid}, task={task}")
+            #print(tid)
+            if wi in exclude and tid in exclude[wi]:
+                #print(wi, tid)
+                continue
+                #print("Excluding short task:", wi)
+                #print("Excluding short task:", wi, tid)
+                
             utils = [u for _, u in task["Util"]]
             
             if not utils:
@@ -65,8 +104,8 @@ def imbalance(system_file, workloads_file, utilization):
                 ti_wi_tid_nnls[wi][tid] = (node, ti)
             else:
                 if ti > ti_wi_tid_nnls[wi][tid][1]:
-                    print(node, ti)
-                    print(ti_wi_tid_nnls[wi].values)
+                    #print(node, ti)
+                    #print(ti_wi_tid_nnls[wi].values)
                     ti_wi_tid_nnls[wi][tid] = (node, ti)
                     
 
@@ -81,7 +120,7 @@ def imbalance(system_file, workloads_file, utilization):
             vals = si_wi_tid_nnls[wi][tid]
             max_util_across_node = max(vals)
             mean_util_of_all_max = sum(vals) / len(vals)
-            si_wi_tid_nnls[wi][tid] = mean_util_of_all_max/max_util_across_node
+            si_wi_tid_nnls[wi][tid] = 1 - mean_util_of_all_max/max_util_across_node
             
     
     '''check again
@@ -158,14 +197,17 @@ if __name__ == "__main__":
     with open (system_polaris_file, "r") as f4:
         system_polaris = json.load(f4)
 
-    check = input("Check: ")
-    if check:
-        check(system_ic2, workloads_ic2, "cpu", check)
+    ncheck = input("Check: ")
+    if ncheck != "N":
+        for i in range(51):
+            check(system_ic2, workloads_ic2, "cpu", i)
+    short_ic2 = exclude_short_tasks(workloads_ic2)
 
-    ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2 = imbalance(system_ic2, workloads_ic2, "cpu")
-    ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris = imbalance(system_polaris, workloads_polaris, "cpu")
-    ti_nnls_memory_ic2, ti_gm_memory_ic2, si_nnls_memory_ic2, si_gm_memory_ic2 = imbalance(system_ic2, workloads_ic2, "memory")
-    ti_nnls_memory_polaris, ti_gm_memory_polaris, si_nnls_memory_polaris, si_gm_memory_polaris = imbalance(system_polaris, workloads_polaris, "memory")
+    '''
+    ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2 = _imbalance(system_ic2, workloads_ic2, "cpu")
+    ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris = _imbalance(system_polaris, workloads_polaris, "cpu")
+    ti_nnls_memory_ic2, ti_gm_memory_ic2, si_nnls_memory_ic2, si_gm_memory_ic2 = _imbalance(system_ic2, workloads_ic2, "memory")
+    ti_nnls_memory_polaris, ti_gm_memory_polaris, si_nnls_memory_polaris, si_gm_memory_polaris = _imbalance(system_polaris, workloads_polaris, "memory")
     
     rows_cpu_ic2 = build_rows(ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2)
     rows_cpu_polaris = build_rows(ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris)
@@ -190,3 +232,4 @@ if __name__ == "__main__":
     #print(df_memory_ic2)
     #print()
     #print(df_memory_polaris)
+    '''
