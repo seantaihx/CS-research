@@ -1,5 +1,3 @@
-from sympy import im
-
 from algorithm_blockwise_nonnegative_least_squares import pertask_utilization_NNLS
 from algorithm_greedy_mean_only import pertask_utilization_greedy
 import json
@@ -8,25 +6,27 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 import matplotlib.pyplot as plt
 import numpy as np
 
-def check(system_file, workloads_file, utilization, tid):
-    contribs_nnls = pertask_utilization_NNLS(system_file, workloads_file, utilization)
-    rows = []
-    for (wi, node), task_list in contribs_nnls.items():
-        if wi != "w0":
-            break
-        for task in task_list:
-            if task["task_id"] == tid:
-                
-                utils = [u for _, u in task["Util"]]
-                print(f"workload={wi}, node={node}, tid={tid} utils:")
-                print(utils)
+def exclude_gpu(workloads_file):
+    gpu_tasks = {}
 
-    
+    for wi in range(len(workloads_file)):
+        tasks = workloads_file[wi]["tasklist"]
+        for t in tasks:
+            tid = t["task_id"]
+            if tid is None:
+                continue
+            gpu = t["gpus"]
+            if gpu is None:
+                continue
+            if f"w{wi}" not in gpu_tasks:
+                gpu_tasks[f"w{wi}"] = []
+            if gpu > 0:
+                gpu_tasks[f"w{wi}"].append(tid)
+        print(f"Workload {wi} has {len(gpu_tasks[f'w{wi}'])} GPU tasks.")
+    #print(gpu_tasks.values())
+    return gpu_tasks
+
 def exclude_short_tasks(workloads_file):
-    """
-    contribs: dict {(wi, node): [task_dict, ...]}
-    Returns: set of (wi, node, tid) to exclude
-    """
     short = {}
 
     for wi in range(len(workloads_file)):
@@ -41,7 +41,6 @@ def exclude_short_tasks(workloads_file):
                 continue
             dur = f - s
             if dur < 60:
-                #print(f"Short task: workload={wi}, tid={tid}, dur={dur}")
                 if f"w{wi}" not in short:
                     short[f"w{wi}"] = []
                 short[f"w{wi}"].append(tid)
@@ -49,7 +48,7 @@ def exclude_short_tasks(workloads_file):
     #print(short.values())
     return short
 
-def _imbalance(system_file, workloads_file, utilization, exclude):
+def _imbalance(system_file, workloads_file, utilization, exclude, include_cpu_hours, gpu_tasks):
     contribs_nnls_cpu = pertask_utilization_NNLS(system_file, workloads_file, utilization)
     contribs_greedy = pertask_utilization_greedy(system_file, workloads_file, utilization)
     contribs_nnls_memory = pertask_utilization_NNLS(system_file, workloads_file, "memory")
@@ -62,13 +61,8 @@ def _imbalance(system_file, workloads_file, utilization, exclude):
                 "Util": [(timestamp, utilization), ...]
                 },...]
     ...
-    
     }
     '''
-
-
-
-    #print(f"exclude: {exclude}")
 
     ti_wi_tid_nnls= {}
     ti_wi_tid_gm = {}
@@ -95,7 +89,8 @@ def _imbalance(system_file, workloads_file, utilization, exclude):
             tid = task["task_id"]
             #print(f"tid={tid}, task={task}")
             #print(tid)
-            if wi in exclude and tid in exclude[wi]:
+
+            if (wi in exclude and tid in exclude[wi]) or (wi in gpu_tasks and tid in gpu_tasks[wi]):
                 #print(wi, tid)
                 continue
                 #print("Excluding short task:", wi)
@@ -139,21 +134,14 @@ def _imbalance(system_file, workloads_file, utilization, exclude):
             max_util_across_node = max(vals)
             mean_util_of_all_max = sum(vals) / len(vals)
             si_wi_tid_nnls[wi][tid] = 1 - mean_util_of_all_max/max_util_across_node
-            
-    
-    '''check again
-    for wi, tid in ti_by_task_node_nnls.items():
-        print(tid.items())
-        print(len(tid))
-        break
-    '''
+   
     
     for (wi, node), task_list in contribs_nnls_memory.items():
         if wi not in mem_max_wi_tid:
             mem_max_wi_tid[wi] = {}
         for task in task_list:
             tid = task["task_id"]
-            if wi in exclude and tid in exclude[wi]:
+            if (wi in exclude and tid in exclude[wi]) or (wi in gpu_tasks and tid in gpu_tasks[wi]):
                 continue
             utils = [u for _, u in task["Util"]]
             if not utils:
@@ -222,8 +210,11 @@ def build_rows(ti_nnls, ti_gm, si_nnls, si_gm):
             rows.append(row)
     return rows
 
+
+
 def cpu_hours(workloads_file):
     cpu_hours_wi_tid = {}
+  
     for wi in range(len(workloads_file)):
         if f"w{wi}" not in cpu_hours_wi_tid:
             cpu_hours_wi_tid[f"w{wi}"] = {}
@@ -244,7 +235,7 @@ def cpu_hours(workloads_file):
     return cpu_hours_wi_tid
 
 
-def overall_correlation(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
+def overall_correlation(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour, cluster):
     ti_vals = []
     si_vals = []
     cpu_vals = []
@@ -320,7 +311,7 @@ def overall_correlation(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
         fig.colorbar(im, ax=ax)
         plt.title(f"Overall Correlation Heatmap for {type}")
         plt.tight_layout()
-        plt.savefig(f"{type}_overall_correlation_heatmap.png")
+        plt.savefig(f"{cluster}_{type}_overall_correlation_heatmap.png")
         plt.close()
     plot_heatmap(pearson_ti_si, pearson_ti_cpu, pearson_ti_mem, pearson_ti_cpu_hours,
                  pearson_si_cpu, pearson_si_mem, pearson_si_cpu_hours,
@@ -332,7 +323,7 @@ def overall_correlation(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
                  kendalltau_si_cpu, kendalltau_si_mem, kendalltau_si_cpu_hours,
                  kendalltau_cpu_mem, kendalltau_cpu_cpu_hours, kendalltau_mem_cpu_hours, "Kendall Tau")
     
-def correlation_per_workload(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
+def correlation_per_workload(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour, cluster):
     ti_vals = {}
     si_vals = {}
     cpu_vals = {}
@@ -389,7 +380,7 @@ def correlation_per_workload(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
             cpu_vals[wi].append(cpu)
             mem_vals[wi].append(mem)
             cpu_hours_vals[wi].append(cpu_hours)
-        print(len(ti_vals), len(si_vals), len(cpu_vals), len(mem_vals), len(cpu_hours_vals))
+        #print(len(ti_vals), len(si_vals), len(cpu_vals), len(mem_vals), len(cpu_hours_vals))
         
         
         pearson_ti_si[wi] = pearsonr(ti_vals[wi], si_vals[wi])[0]
@@ -425,7 +416,7 @@ def correlation_per_workload(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
         kendalltau_cpu_cpu_hours[wi] = kendalltau(cpu_vals[wi], cpu_hours_vals[wi])[0]
         kendalltau_mem_cpu_hours[wi] = kendalltau(mem_vals[wi], cpu_hours_vals[wi])[0]
         
-    def plot_heatmap(wi, ti_si, ti_cpu, ti_mem, ti_cpu_hours, si_cpu, si_mem, si_cpu_hours, cpu_mem, cpu_cpu_hours, mem_cpu_hours, type):
+    def plot_heatmap(wi, type):
         labels = ["TI", "SI", "CPU", "Memory", "CPU Hours"]
         corr_matrix = np.array([
             [1,
@@ -472,19 +463,13 @@ def correlation_per_workload(ti_nnls, si_nnls, cpu_max, mem_max, cpu_hour):
         fig.colorbar(im, ax=ax)
         plt.title(f"{type} Correlation Heatmap for Workload {wi}")
         plt.tight_layout()
-        plt.savefig(f"{type}_correlation_heatmap_{wi}.png")
+        plt.savefig(f"{cluster}_{type}_correlation_heatmap_{wi}.png")
         plt.close()
     
     for wi in ti_nnls:
-        plot_heatmap(wi, pearson_ti_si[wi], pearson_ti_cpu[wi], pearson_ti_mem[wi], pearson_ti_cpu_hours[wi],
-                     pearson_si_cpu[wi], pearson_si_mem[wi], pearson_si_cpu_hours[wi],
-                     pearson_cpu_mem[wi], pearson_cpu_cpu_hours[wi], pearson_mem_cpu_hours[wi], "Pearson")
-        plot_heatmap(wi, spearman_ti_si[wi], spearman_ti_cpu[wi], spearman_ti_mem[wi], spearman_ti_cpu_hours[wi],
-                     spearman_si_cpu[wi], spearman_si_mem[wi], spearman_si_cpu_hours[wi],
-                     spearman_cpu_mem[wi], spearman_cpu_cpu_hours[wi], spearman_mem_cpu_hours[wi], "Spearman")
-        plot_heatmap(wi, kendalltau_ti_si[wi], kendalltau_ti_cpu[wi], kendalltau_ti_mem[wi], kendalltau_ti_cpu_hours[wi],
-                     kendalltau_si_cpu[wi], kendalltau_si_mem[wi], kendalltau_si_cpu_hours[wi],
-                     kendalltau_cpu_mem[wi], kendalltau_cpu_cpu_hours[wi], kendalltau_mem_cpu_hours[wi], "KendallTau")
+        plot_heatmap(wi, "Pearson")
+        plot_heatmap(wi, "Spearman")
+        plot_heatmap(wi, "KendallTau")
 
 if __name__ == "__main__":
 
@@ -502,22 +487,22 @@ if __name__ == "__main__":
     with open (system_polaris_file, "r") as f4:
         system_polaris = json.load(f4)
 
-    ncheck = input("Check: ")
-    if ncheck != "N":
-        for i in range(51):
-            check(system_ic2, workloads_ic2, "cpu", i)
     short_ic2 = exclude_short_tasks(workloads_ic2)
     short_polaris = exclude_short_tasks(workloads_polaris)
+    gpu_task_ic2 = exclude_gpu(workloads_ic2)
+    gpu_task_polaris = exclude_gpu(workloads_polaris)
 
     cpu_hours_ic2 = cpu_hours(workloads_ic2)
     cpu_hours_polaris = cpu_hours(workloads_polaris)
 
-    #ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2, cpu_max_ic2, mem_max_ic2 = _imbalance(system_ic2, workloads_ic2, "cpu", exclude=short_ic2)
-    ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris, cpu_max_polaris, mem_max_polaris = _imbalance(system_polaris, workloads_polaris, "cpu", exclude=short_polaris)
+    ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2, cpu_max_ic2, mem_max_ic2 = _imbalance(system_ic2, workloads_ic2, "cpu", exclude=short_ic2, include_cpu_hours=cpu_hours_ic2, gpu_tasks=gpu_task_ic2)
+    ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris, cpu_max_polaris, mem_max_polaris = _imbalance(system_polaris, workloads_polaris, "cpu", exclude=short_polaris, include_cpu_hours=cpu_hours_polaris, gpu_tasks=gpu_task_polaris)
 
 
-    correlation_per_workload(ti_nnls_cpu_polaris, si_nnls_cpu_polaris, cpu_max_polaris, mem_max_polaris, cpu_hours_polaris)
-    overall_correlation(ti_nnls_cpu_polaris, si_nnls_cpu_polaris, cpu_max_polaris, mem_max_polaris, cpu_hours_polaris)
+    correlation_per_workload(ti_nnls_cpu_ic2, si_nnls_cpu_ic2, cpu_max_ic2, mem_max_ic2, cpu_hours_ic2, "ic2")
+    overall_correlation(ti_nnls_cpu_ic2, si_nnls_cpu_ic2, cpu_max_ic2, mem_max_ic2, cpu_hours_ic2, "ic2")
+    correlation_per_workload(ti_nnls_cpu_polaris, si_nnls_cpu_polaris, cpu_max_polaris, mem_max_polaris, cpu_hours_polaris, "polaris")
+    overall_correlation(ti_nnls_cpu_polaris, si_nnls_cpu_polaris, cpu_max_polaris, mem_max_polaris, cpu_hours_polaris, "polaris")
     '''
     ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2, cpu_max_ic2, mem_max_ic2 = _imbalance(system_ic2, workloads_ic2, "cpu")
     ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris = _imbalance(system_polaris, workloads_polaris, "cpu")
