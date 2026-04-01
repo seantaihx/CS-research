@@ -36,8 +36,6 @@ def to_float_ts(x):
     except Exception:
         return float(str(x))
 
-# === BUILD NODE UTILIZATION ===
-
 
 def pertask_utilization_greedy(system_all, workloads_all, utilization):
 

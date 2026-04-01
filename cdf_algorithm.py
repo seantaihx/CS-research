@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import json
 from algorithm_blockwise_nonnegative_least_squares import nnls_main
 from algorithm_greedy_mean_only import gm_main
+from gpu_imbalance_correlation import gpu_imbalance
 
 def _to_1d_array(x):
     """Convert list/Series/np array -> 1D float array, dropping NaNs."""
@@ -26,6 +27,82 @@ def _percentile(values, p):
         return np.nan
     return float(np.percentile(v, p))
 
+def plot_cdf_gpu(gpu_ic2, gpu_polaris,*,
+                 p_tail=95,
+                 title_prefix="GPU Utilization CDF across workloads",
+                 xlabel="GPU Utilization (%)",
+                 save_path=None,
+                 show=True):
+    
+    def _extract(gpu_utils):
+        if isinstance(gpu_utils, dict):
+            return list(gpu_utils.values())
+        return gpu_utils
+    
+    gpu_utils_ic2 = _extract(gpu_ic2)
+    gpu_utils_polaris = _extract(gpu_polaris)
+    
+    # --- CPU CDF ---
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    fig.suptitle(
+        "GPU CDF across workloads",
+        fontsize=20,
+        fontweight="bold"
+    )
+
+    x1, y1 = _cdf_xy(gpu_utils_ic2)
+    x2, y2 = _cdf_xy(gpu_utils_polaris)
+
+    axes[0].plot(x1, y1, label="IC2")
+    axes[1].plot(x2, y2, label="Polaris")
+
+        # percentiles
+    for label, values in [("IC2", gpu_utils_ic2), ("Polaris", gpu_utils_polaris)]:
+        p50 = _percentile(values, 50)
+        pt = _percentile(values, p_tail)
+        if np.isfinite(p50):
+            if label == "IC2":
+                axes[0].axvline(p50, linestyle="--", linewidth=1)
+            else:
+                axes[1].axvline(p50, linestyle="--", linewidth=1)
+        if np.isfinite(pt):
+            if label == "IC2":
+                axes[0].axvline(pt, linestyle=":", linewidth=1)
+            else:
+                axes[1].axvline(pt, linestyle=":", linewidth=1)
+    for i in range(2):
+        axes[i].set_title(f"{title_prefix}")
+        axes[i].set_xlabel(xlabel)
+        axes[i].set_ylabel("CDF")
+        axes[i].grid(True, alpha=0.3)
+        axes[i].legend()
+
+
+    # Print numbers you can cite in text
+    gpu_p50_ic2, gpu_p95_ic2 = _percentile(gpu_utils_ic2, 50), _percentile(gpu_utils_ic2, p_tail)
+    gpu_p50_polaris, gpu_p95_polaris = _percentile(gpu_utils_polaris, 50), _percentile(gpu_utils_polaris, p_tail)
+    print("GPU Utilization percentiles")
+    print(f"  IC2:       p50={gpu_p50_ic2:.6g}, p{p_tail}={gpu_p95_ic2:.6g}")
+    print(f"  Polaris: p50={gpu_p50_polaris:.6g}, p{p_tail}={gpu_p95_polaris:.6g}")
+    if np.isfinite(gpu_p95_ic2) and gpu_p95_ic2 > 0:
+        print(f"  Tail ratio (ic2/polaris) at p{p_tail}: {gpu_p95_ic2 / gpu_p95_polaris:.3g}")
+
+    # Save if requested
+    if save_path:
+        # save_path can be a prefix; we save two files
+        fig.savefig(f"{save_path}_{type}_cdf.png", dpi=300, bbox_inches="tight")
+
+
+    if show:
+        plt.show()
+
+    return {
+        "ic2": {"ic2_p50": gpu_p50_ic2, f"ic2_p{p_tail}": gpu_p95_ic2},
+        "polaris": {"polaris_p50": gpu_p50_polaris, f"polaris_p{p_tail}": gpu_p95_polaris,}
+    }
+        
 
 def plot_cdf_with_percentiles(
     cpu_mae_nnls,
@@ -362,6 +439,63 @@ if __name__ == "__main__":
                                   cpu_mae_nnls2 = cpu_nnls_node_polaris, cpu_mae_greedy2 = cpu_gm_node_polaris, mem_mae_nnls2 = mem_nnls_node_polaris, mem_mae_greedy2 = mem_gm_node_polaris,
                                   p_tail=95, save_path=True, show=True)
         
+    elif prompt == "gpu":
+        workload_file_ic2 = "all_workloads_ic2.json"
+        workload_file_polaris = "all_workloads_polaris.json"
+        #workload_file_ic2 = input("Enter IC2 workload file: ")
+        #workload_file_polaris = input("Enter Polaris workload file: ")
+        with open(workload_file_ic2, "r") as f1:
+            workloads_ic2 = json.load(f1)
+        with open(workload_file_polaris, "r") as f2:
+            workloads_polaris = json.load(f2)
+        workload_util_ic2 = {}
+        workload_util_polaris = {}
+        all_workloads_ic2 = []
+        all_workloads_polaris = []
+        for wi in range(len(workloads_ic2)):
+            workload_util_ic2[f"w{wi}"] = []
+            tasks = workloads_ic2[wi]["tasklist"]
+            for t in tasks:
+                tid = t["task_id"]
+                if tid is None:
+                    continue
+                gpu = t["gpus"]
+                if gpu is None or gpu == 0:
+                    continue
+                for node in t["nodes"]:
+                    metrics = node["metrics"]
+                    gpu_utils = metrics["gpu_util"]
+                    if not gpu_utils:
+                        continue
+                    for row in gpu_utils:
+                        vals = row[1:]
+                        for j in range(len(vals)):
+                            workload_util_ic2[f"w{wi}"].append(float(vals[j]))
+                            all_workloads_ic2.append(float(vals[j]))
+
+        for wi in range(len(workloads_polaris)):
+            workload_util_polaris[f"w{wi}"] = []
+            
+            tasks = workloads_polaris[wi]["tasklist"]
+            for t in tasks:
+                tid = t["task_id"]
+                if tid is None:
+                    continue
+                gpu = t["gpus"]
+                if gpu is None or gpu == 0:
+                    continue
+                for node in t["nodes"]:
+                    metrics = node["metrics"]
+                    gpu_utils = metrics["gpu_util"]
+                    if not gpu_utils:
+                        continue
+                    for row in gpu_utils:
+                        vals = row[1:]
+                        for j in range(len(vals)):
+                            workload_util_polaris[f"w{wi}"].append(float(vals[j]))
+                            all_workloads_polaris.append(float(vals[j]))
+        plot_cdf_gpu(all_workloads_ic2, all_workloads_polaris, p_tail=95, save_path=True, show=True)
+
 '''
     plot_cdf_with_percentiles(
         cpu_nnls, cpu_gm, mem_nnls, mem_gm,

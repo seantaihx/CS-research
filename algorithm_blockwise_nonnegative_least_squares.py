@@ -67,6 +67,7 @@ def mean_then_blockwise_nnls(ts, y, tasks, block_size=30, l2=1e-2): #time, util,
             #convert mask to 0/1, append the column to A_cols
             #record which task and which block this column corresponds to
     if not A_cols: return contribs #no tasks case return zero (edge case)
+    print("T =", len(ts), "num_tasks =", len(tasks), "num_cols =", len(A_cols))
     A=np.vstack(A_cols).T; A_aug=np.vstack([A,np.sqrt(l2)*np.eye(A.shape[1])])
     #A: design matrix with shape (T, total_blocks) T is at line 52
     #each column is one task block activity window
