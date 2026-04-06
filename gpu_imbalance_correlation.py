@@ -3,6 +3,7 @@ from cpu_imbalance_correlation import exclude_short_tasks
 from scipy.stats import pearsonr, spearmanr, kendalltau
 import matplotlib.pyplot as plt
 import numpy as np
+from cdf_pdf_imbalance_unweighted import plot_imbalance_2x2
 
 def gpu_imbalance(workload_file, short):
     gpu_imbalance = {}

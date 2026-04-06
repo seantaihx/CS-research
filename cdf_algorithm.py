@@ -415,10 +415,14 @@ if __name__ == "__main__":
 
 
     elif prompt == "both":
-        workload_file_ic2 = input("Enter IC2 workload file: ")
-        system_file_ic2 = input("Enter IC2 system load file: ")
-        workload_file_polaris = input("Enter Polaris workload file: ")
-        system_file_polaris = input("Enter Polaris system load file: ")
+        #workload_file_ic2 = input("Enter IC2 workload file: ")
+        #system_file_ic2 = input("Enter IC2 system load file: ")
+        #workload_file_polaris = input("Enter Polaris workload file: ")
+        #system_file_polaris = input("Enter Polaris system load file: ")
+        workload_file_ic2 = "all_workloads_ic2.json"
+        system_file_ic2 = "all_system_loads_ic2.json"
+        workload_file_polaris = "all_workloads_polaris.json"
+        system_file_polaris = "all_system_loads_polaris.json"
         with open(workload_file_ic2, "r") as f1:
             workloads_ic2 = json.load(f1)
         with open(system_file_ic2, "r") as f2:
@@ -438,6 +442,10 @@ if __name__ == "__main__":
         plot_cdf_with_percentiles(cpu_nnls_node_ic2, cpu_gm_node_ic2, mem_nnls_node_ic2, mem_gm_node_ic2, type="both", 
                                   cpu_mae_nnls2 = cpu_nnls_node_polaris, cpu_mae_greedy2 = cpu_gm_node_polaris, mem_mae_nnls2 = mem_nnls_node_polaris, mem_mae_greedy2 = mem_gm_node_polaris,
                                   p_tail=95, save_path=True, show=True)
+        print(f"Length of mae_list_nnls: {len(cpu_nnls_node_ic2)}, {len(mem_nnls_node_ic2)}")
+        print(f"Length of mae_list_gm: {len(cpu_gm_node_ic2)}, {len(mem_gm_node_ic2)}")
+        print(f"Length of mae_list_nnls_polaris: {len(cpu_nnls_node_polaris)}, {len(mem_nnls_node_polaris)}")
+        print(f"Length of mae_list_gm_polaris: {len(cpu_gm_node_polaris)}, {len(mem_gm_node_polaris)}")
         
     elif prompt == "gpu":
         workload_file_ic2 = "all_workloads_ic2.json"
@@ -466,6 +474,7 @@ if __name__ == "__main__":
                     metrics = node["metrics"]
                     gpu_utils = metrics["gpu_util"]
                     if not gpu_utils:
+                        print(f"No gpu_util for workload w{wi}, task {tid}")
                         continue
                     for row in gpu_utils:
                         vals = row[1:]
@@ -483,11 +492,13 @@ if __name__ == "__main__":
                     continue
                 gpu = t["gpus"]
                 if gpu is None or gpu == 0:
+                    print(f"No GPUs for workload w{wi}, task {tid}")
                     continue
                 for node in t["nodes"]:
                     metrics = node["metrics"]
                     gpu_utils = metrics["gpu_util"]
                     if not gpu_utils:
+                        print(f"No gpu_util for workload w{wi}, task {tid}")
                         continue
                     for row in gpu_utils:
                         vals = row[1:]

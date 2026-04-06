@@ -87,7 +87,7 @@ def job_duration_seconds(task, task_nodes):
     return max(timestamps) - min(timestamps)
 
 
-def make_gpu_job_summary(workload_file):
+def make_gpu_job_summary(workload_file, clusters):
     workload_all = json.load(open(workload_file))
 
     # Job-level lists (one value per GPU job)
@@ -127,12 +127,15 @@ def make_gpu_job_summary(workload_file):
     ]
     #print("Total GPU jobs:", gpu_job_count)
     df = pd.DataFrame(summary_rows, columns=["Metrics", "Median", "Mean", "Max", "Std Dev"])
-    df.to_csv("table_GPU_polaris.csv", index=False)
-    print("Saved:", "table_GPU_polaris.csv")
+    df.to_csv(f"table_GPU_{clusters}.csv", index=False)
+    print("Saved:", f"table_GPU_{clusters}.csv")
     return df
 
 
 if __name__ == "__main__":
-    workload_file = "all_workloads_polaris.json"  # change path if needed
-    df = make_gpu_job_summary(workload_file)
-    print(df)
+    workload_polaris_file = "all_workloads_polaris.json"  # change path if needed
+    workload_ic2_file = "all_workloads_ic2.json"  # change path if needed
+    df_polaris = make_gpu_job_summary(workload_polaris_file, "polaris")
+    df_ic2 = make_gpu_job_summary(workload_ic2_file, "ic2")
+    print(df_polaris)
+    print(df_ic2)

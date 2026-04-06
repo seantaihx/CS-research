@@ -557,12 +557,12 @@ if __name__ == "__main__":
     overall_correlation(ti_nnls_cpu_ic2, si_nnls_cpu_ic2, cpu_max_ic2, mem_max_ic2, cpu_hours_ic2, "ic2")
     correlation_per_workload(ti_nnls_cpu_polaris, si_nnls_cpu_polaris, cpu_max_polaris, mem_max_polaris, cpu_hours_polaris, "polaris")
     overall_correlation(ti_nnls_cpu_polaris, si_nnls_cpu_polaris, cpu_max_polaris, mem_max_polaris, cpu_hours_polaris, "polaris")
-    '''
-    ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2, cpu_max_ic2, mem_max_ic2 = _imbalance(system_ic2, workloads_ic2, "cpu")
-    ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris = _imbalance(system_polaris, workloads_polaris, "cpu")
-    ti_nnls_memory_ic2, ti_gm_memory_ic2, si_nnls_memory_ic2, si_gm_memory_ic2 = _imbalance(system_ic2, workloads_ic2, "memory")
-    ti_nnls_memory_polaris, ti_gm_memory_polaris, si_nnls_memory_polaris, si_gm_memory_polaris = _imbalance(system_polaris, workloads_polaris, "memory")
     
+    ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2, cpu_max_ic2, mem_max_ic2 = _imbalance(system_ic2, workloads_ic2, "cpu", exclude=short_ic2, include_cpu_hours=cpu_hours_ic2, gpu_tasks=gpu_task_ic2)
+    ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris = _imbalance(system_polaris, workloads_polaris, "cpu", exclude=short_polaris, include_cpu_hours=cpu_hours_polaris, gpu_tasks=gpu_task_polaris)
+    ti_nnls_memory_ic2, ti_gm_memory_ic2, si_nnls_memory_ic2, si_gm_memory_ic2 = _imbalance(system_ic2, workloads_ic2, "memory", exclude=short_ic2, include_cpu_hours=cpu_hours_ic2, gpu_tasks=gpu_task_ic2)
+    ti_nnls_memory_polaris, ti_gm_memory_polaris, si_nnls_memory_polaris, si_gm_memory_polaris = _imbalance(system_polaris, workloads_polaris, "memory", exclude=short_polaris, include_cpu_hours=cpu_hours_polaris, gpu_tasks=gpu_task_polaris)
+
     rows_cpu_ic2 = build_rows(ti_nnls_cpu_ic2, ti_gm_cpu_ic2, si_nnls_cpu_ic2, si_gm_cpu_ic2)
     rows_cpu_polaris = build_rows(ti_nnls_cpu_polaris, ti_gm_cpu_polaris, si_nnls_cpu_polaris, si_gm_cpu_polaris)
     rows_memory_ic2 = build_rows(ti_nnls_memory_ic2, ti_gm_memory_ic2, si_nnls_memory_ic2, si_gm_memory_ic2)
@@ -586,4 +586,4 @@ if __name__ == "__main__":
     #print(df_memory_ic2)
     #print()
     #print(df_memory_polaris)
-    '''
+    

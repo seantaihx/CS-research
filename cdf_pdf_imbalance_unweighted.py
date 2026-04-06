@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from imbalance import _imbalance
+from cpu_imbalance_correlation import _imbalance
 import json
-from imbalance import exclude_short_tasks
+from cpu_imbalance_correlation import exclude_short_tasks
 
 def to_1d_list(ti_nnls, ti_gm, si_nnls, si_gm):
     """

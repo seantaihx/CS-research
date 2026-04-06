@@ -455,7 +455,7 @@ def separate_utilization_per_workload(workload_i, system_data, workloads_data, u
             totalMAE += abs(residual[i2])
             node_abs_sum += abs(residual[i2])
             t_count += 1
-            if y_obs[i2] == 0.0 or residual[i2] < 0:
+            if y_obs[i2] == 0.0:
                 continue
             totalMAPE += (abs(residual[i2])/y_obs[i2])*100
             count += 1

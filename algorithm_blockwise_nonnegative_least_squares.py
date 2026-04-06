@@ -240,7 +240,7 @@ def nnls_main(workloads_all, system_all, utilization):
             for reconstructed, original, t in zip(recon, utilization_data, timestamp):
                 
                 #print(reconstructed, original)
-                if (reconstructed - original) < 0 or original == 0:
+                if original == 0:
                     continue
                     
                 #print("C", c)  

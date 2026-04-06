@@ -5,7 +5,7 @@ import pandas as pd
 
 
 
-def make_table(system_file, workload_file):
+def make_table(system_file, workload_file, clusters):
     system_all = json.load(open(system_file))
     workload_all = json.load(open(workload_file))
     assert len(system_all) == len(workload_all)
@@ -112,16 +112,20 @@ def make_table(system_file, workload_file):
     )
 
     # Export (CSV works everywhere, Excel can open it)
-    df_summary.to_csv("table_workload_polaris.csv", index=False)
+    df_summary.to_csv(f"table_workload_{clusters}.csv", index=False)
     print("Saved")
 
     return df_summary
 
 
 if __name__ == "__main__":
-    system_file = Path("all_system_loads_polaris.json")
-    workload_file = Path("all_workloads_polaris.json")
+    system_polaris_file = Path("all_system_loads_polaris.json")
+    workload_polaris_file = Path("all_workloads_polaris.json")
+    system_ic2_file = Path("all_system_loads_ic2.json")
+    workload_ic2_file = Path("all_workloads_ic2.json")
     #system_file = input("Enter system file path: ")
     #workload_file = input("Enter workload file path: ")
-    table = make_table(system_file, workload_file)
-    print(table)
+    table_polaris = make_table(system_polaris_file, workload_polaris_file, "polaris")
+    table_ic2 = make_table(system_ic2_file, workload_ic2_file, "ic2")
+    print(table_polaris)
+    print(table_ic2)

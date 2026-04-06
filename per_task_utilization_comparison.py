@@ -5,10 +5,19 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import json
 
+with open("all_workloads_ic2.json", "r") as f1:
+    workloads_ic2 = json.load(f1)
+with open("all_system_loads_ic2.json", "r") as f2:
+    system_loads_ic2 = json.load(f2)
+with open("all_workloads_polaris.json", "r") as f3:
+    workloads_polaris = json.load(f3)
+with open("all_system_loads_polaris.json", "r") as f4:
+    system_loads_polaris = json.load(f4)
 
-contribs_nnls = pertask_utilization_NNLS()
-contribs_greedy = pertask_utilization_greedy()
+contribs_nnls = pertask_utilization_NNLS(workloads_ic2, system_loads_ic2, "cpu")
+contribs_greedy = pertask_utilization_greedy(workloads_ic2, system_loads_ic2, "cpu")
 
 OUT_DIR = "plots_ic2_memory_per_node"
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -123,8 +132,8 @@ for (wname, node) in common_keys:
     if plotted == 0:
         plt.close(fig)
         continue
-    all_mse += total_mse/big_counter
-    all_mae += total_mae/big_counter
+    all_mse += total_mse/workload_counter
+    all_mae += total_mae/workload_counter
     ax.set_title(f"{wname} | {node} | {plotted} active tasks (NNLS solid vs Greedy dashed)")
     ax.set_xlabel("timestamp (relative)" if USE_RELATIVE_TIME else "timestamp")
     ax.set_ylabel("utilization")
@@ -153,12 +162,13 @@ for (wname, node) in common_keys:
         title_fontsize=9
     )
 
-    #safe_w = "".join(c if c.isalnum() else "_" for c in str(wname))
-    #safe_n = "".join(c if c.isalnum() else "_" for c in str(node))
+    safe_w = "".join(c if c.isalnum() else "_" for c in str(wname))
+    safe_n = "".join(c if c.isalnum() else "_" for c in str(node))
     out_path = os.path.join(OUT_DIR, f"compare.png")
 
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
+    print(f"Saved plot for workload {wname}, node {node} with {plotted} active tasks to {out_path}")
 
 print("Plots saved to:", OUT_DIR)
 #print("Overall avg mse:", all_mse/big_counter)
