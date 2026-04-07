@@ -132,7 +132,7 @@ def build_workloads_low_cpu_overlap(benchmark_data):
 
                 next_job_index += 1
 
-            # FCFS
+            # opportunistic backfilling
             started_any = True
             while started_any:
                 started_any = False
@@ -140,37 +140,46 @@ def build_workloads_low_cpu_overlap(benchmark_data):
                 if not waiting_jobs:
                     break
 
-                first_job = waiting_jobs[0]
-                needed_cpus = first_job["num_cpus"]
+                selected_index = None
 
-                if needed_cpus <= available_cpus:
-                    waiting_jobs.pop(0)
+                # first try the head-of-line job
+                if waiting_jobs[0]["num_cpus"] <= available_cpus:
+                    selected_index = 0
+                else:
+                    # opportunistically backfill: scan later jobs
+                    for idx in range(1, len(waiting_jobs)):
+                        if waiting_jobs[idx]["num_cpus"] <= available_cpus:
+                            selected_index = idx
+                            break
+
+                if selected_index is not None:
+                    selected_job = waiting_jobs.pop(selected_index)
 
                     start_time = current_time
-                    duration = len(first_job["cpu_util_raw"]) * TIMESTEP
+                    duration = len(selected_job["cpu_util_raw"]) * TIMESTEP
                     end_time = start_time + duration
 
                     cpu_util_with_ts = []
                     mem_util_with_ts = []
 
-                    for k in range(len(first_job["cpu_util_raw"])):
+                    for k in range(len(selected_job["cpu_util_raw"])):
                         cpu_util_with_ts.append([
                             start_time + (k + 1) * TIMESTEP,
-                            first_job["cpu_util_raw"][k]
+                            selected_job["cpu_util_raw"][k]
                         ])
 
-                    for k in range(len(first_job["memory_util_raw"])):
+                    for k in range(len(selected_job["memory_util_raw"])):
                         mem_util_with_ts.append([
                             start_time + (k + 1) * TIMESTEP,
-                            first_job["memory_util_raw"][k]
+                            selected_job["memory_util_raw"][k]
                         ])
 
                     new_job = {
-                        "job_id": first_job["job_id"],
-                        "benchmark": first_job["benchmark"],
-                        "num_cpus": first_job["num_cpus"],
-                        "threads_per_node": first_job["threads_per_node"],
-                        "arrival_time": first_job["arrival_time"],
+                        "job_id": selected_job["job_id"],
+                        "benchmark": selected_job["benchmark"],
+                        "num_cpus": selected_job["num_cpus"],
+                        "threads_per_node": selected_job["threads_per_node"],
+                        "arrival_time": selected_job["arrival_time"],
                         "start_time": start_time,
                         "end_time": end_time,
                         "cpu_util": cpu_util_with_ts,
@@ -179,7 +188,7 @@ def build_workloads_low_cpu_overlap(benchmark_data):
 
                     workload["jobs"].append(new_job)
                     running_jobs.append(new_job)
-                    available_cpus -= needed_cpus
+                    available_cpus -= selected_job["num_cpus"]
                     started_any = True
 
         all_workloads.append(workload)
@@ -188,6 +197,7 @@ def build_workloads_low_cpu_overlap(benchmark_data):
         json.dump(all_workloads, f, indent=2)
 
     return all_workloads
+
 
 def build_workloads(benchmark_data):
     all_jobs = benchmark_data
@@ -239,10 +249,12 @@ def build_workloads(benchmark_data):
             )
 
             current_time = min(next_arrival_time, next_finish_time)
+
             if not running_jobs and waiting_jobs and next_job_index >= JOBS_PER_WORKLOAD:
                 print("No running jobs, jobs still waiting, and no more arrivals.")
                 print("First waiting job needs", waiting_jobs[0]["num_cpus"], "CPUs, available =", available_cpus)
                 break
+
             # first release finished jobs
             finished_now = [job for job in running_jobs if job["end_time"] <= current_time]
             for job in finished_now:
@@ -280,7 +292,7 @@ def build_workloads(benchmark_data):
 
                 next_job_index += 1
 
-            # FCFS: try to start waiting jobs in order
+            # opportunistic backfilling
             started_any = True
             while started_any:
                 started_any = False
@@ -288,37 +300,46 @@ def build_workloads(benchmark_data):
                 if not waiting_jobs:
                     break
 
-                first_job = waiting_jobs[0]
-                needed_cpus = first_job["num_cpus"]
+                selected_index = None
 
-                if needed_cpus <= available_cpus:
-                    waiting_jobs.pop(0)
+                # first try the FCFS head job
+                if waiting_jobs[0]["num_cpus"] <= available_cpus:
+                    selected_index = 0
+                else:
+                    # backfill with later jobs that fit
+                    for idx in range(1, len(waiting_jobs)):
+                        if waiting_jobs[idx]["num_cpus"] <= available_cpus:
+                            selected_index = idx
+                            break
+
+                if selected_index is not None:
+                    selected_job = waiting_jobs.pop(selected_index)
 
                     start_time = current_time
-                    duration = len(first_job["cpu_util_raw"]) * TIMESTEP
+                    duration = len(selected_job["cpu_util_raw"]) * TIMESTEP
                     end_time = start_time + duration
 
                     cpu_util_with_ts = []
                     mem_util_with_ts = []
 
-                    for k in range(len(first_job["cpu_util_raw"])):
+                    for k in range(len(selected_job["cpu_util_raw"])):
                         cpu_util_with_ts.append([
                             start_time + (k + 1) * TIMESTEP,
-                            first_job["cpu_util_raw"][k]
+                            selected_job["cpu_util_raw"][k]
                         ])
 
-                    for k in range(len(first_job["memory_util_raw"])):
+                    for k in range(len(selected_job["memory_util_raw"])):
                         mem_util_with_ts.append([
                             start_time + (k + 1) * TIMESTEP,
-                            first_job["memory_util_raw"][k]
+                            selected_job["memory_util_raw"][k]
                         ])
 
                     new_job = {
-                        "job_id": first_job["job_id"],
-                        "benchmark": first_job["benchmark"],
-                        "num_cpus": first_job["num_cpus"],
-                        "threads_per_node": first_job["threads_per_node"],
-                        "arrival_time": first_job["arrival_time"],
+                        "job_id": selected_job["job_id"],
+                        "benchmark": selected_job["benchmark"],
+                        "num_cpus": selected_job["num_cpus"],
+                        "threads_per_node": selected_job["threads_per_node"],
+                        "arrival_time": selected_job["arrival_time"],
                         "start_time": start_time,
                         "end_time": end_time,
                         "cpu_util": cpu_util_with_ts,
@@ -327,7 +348,7 @@ def build_workloads(benchmark_data):
 
                     workload["jobs"].append(new_job)
                     running_jobs.append(new_job)
-                    available_cpus -= needed_cpus
+                    available_cpus -= selected_job["num_cpus"]
                     started_any = True
 
         all_workloads.append(workload)
@@ -337,8 +358,10 @@ def build_workloads(benchmark_data):
 
     return all_workloads
 
+
 if __name__ == "__main__":  
     with open("benchmark_results.json", "r") as f:
         benchmark_data = json.load(f)
+
     workloads = build_workloads(benchmark_data)
     workloads_low_cpu_overlap = build_workloads_low_cpu_overlap(benchmark_data)

@@ -339,6 +339,7 @@ def _cdf_y_at_x(values, x_target):
     if idx == 0:
         return 0.0
     return float(y[idx - 1])
+
 def plot_benchmark_cdf(results_nnls, results_gm, save_path="benchmark_cdf.png", p_tail=95):
     actual_cpu = []
     actual_mem = []
